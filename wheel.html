@@ -1,0 +1,403 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>3D Car Mechanical - Steering Sync Fixed</title>
+    <style>
+        body { margin: 0; overflow: hidden; font-family: 'Segoe UI', sans-serif; background: #87ceeb; touch-action: none; }
+        #gui {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            color: #333;
+            background: rgba(255, 255, 255, 0.9);
+            padding: 12px;
+            border-radius: 8px;
+            pointer-events: none;
+            border-left: 4px solid #f1c40f;
+            z-index: 10;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        .stat { margin-bottom: 3px; font-size: 13px; text-transform: uppercase; font-weight: bold; }
+        .stat span { color: #f39c12; }
+
+        #pedal-container {
+            position: absolute;
+            bottom: 40px;
+            left: 40px;
+            display: flex;
+            gap: 20px;
+            align-items: flex-end;
+            z-index: 100;
+        }
+        .pedal {
+            width: 75px;
+            height: 125px;
+            background: rgba(30, 30, 30, 0.95);
+            border: 3px solid #fff;
+            border-radius: 12px;
+            color: #fff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            user-select: none;
+            touch-action: none;
+            transition: transform 0.1s;
+        }
+        .pedal:active, .pedal.active {
+            transform: scale(0.9) translateY(5px);
+            background: rgba(60, 60, 60, 1);
+            border-color: #f1c40f;
+        }
+        #pedal-brake { height: 100px; width: 95px; } 
+
+        #steering-container {
+            position: absolute;
+            bottom: 40px;
+            right: 40px;
+            width: 200px;
+            height: 200px;
+            z-index: 100;
+            user-select: none;
+            touch-action: none;
+        }
+        #ui-wheel {
+            width: 100%;
+            height: 100%;
+            background: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><circle cx="50" cy="50" r="46" fill="rgba(20,20,20,0.9)" stroke="white" stroke-width="4"/><circle cx="50" cy="50" r="38" fill="none" stroke="rgba(255,255,255,0.1)" stroke-width="1"/><line x1="50" y1="4" x2="50" y2="20" stroke="yellow" stroke-width="4"/><path d="M15 35 L85 35 M50 35 L50 90" stroke="white" stroke-width="6" fill="none" stroke-linecap="round"/><circle cx="50" cy="50" r="8" fill="white"/></svg>') no-repeat center;
+            background-size: contain;
+        }
+
+        canvas { display: block; }
+    </style>
+</head>
+<body>
+
+    <div id="gui">
+        <div class="stat">Speed: <span id="speed-val">0</span> / 30</div>
+        <div class="stat">Steer: <span id="steer-val">0</span>°</div>
+        <div class="stat">Display: <span id="status" style="color:#2ecc71">ROTATION SYNCED</span></div>
+    </div>
+
+    <div id="pedal-container">
+        <div id="pedal-accel" class="pedal">ACC</div>
+        <div id="pedal-brake" class="pedal">BRK</div>
+    </div>
+
+    <div id="steering-container">
+        <div id="ui-wheel"></div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+
+    <script>
+        // --- Config ---
+        const CONFIG = {
+            acceleration: 0.6,      
+            brakingPower: 1.2,     
+            friction: 0.02,        
+            maxSpeed: 30,          
+            maxSteer: 80 * (Math.PI / 180), 
+            fov: 65,
+            roadWidth: 18,          
+            gridSpacing: 120, 
+            gridSize: 3,
+            borderHeight: 4.5,     
+            borderWidth: 1.5,       
+            roadClamping: 7.4,
+            carRadius: 2.2 
+        };
+
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x87ceeb);
+        scene.fog = new THREE.Fog(0x87ceeb, 150, 750);
+
+        const camera = new THREE.PerspectiveCamera(CONFIG.fov, window.innerWidth / window.innerHeight, 0.1, 2000);
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.shadowMap.enabled = true;
+        document.body.appendChild(renderer.domElement);
+
+        scene.add(new THREE.AmbientLight(0xffffff, 0.7));
+        const sun = new THREE.DirectionalLight(0xffffff, 1.2);
+        sun.position.set(-200, 300, 100);
+        sun.castShadow = true;
+        scene.add(sun);
+
+        const matRoad = new THREE.MeshPhongMaterial({ color: 0x111111 });
+        const matBorder = new THREE.MeshPhongMaterial({ color: 0x000000 });
+        const matLine = new THREE.MeshBasicMaterial({ color: 0xffff00 }); 
+        const matChassis = new THREE.MeshPhongMaterial({ color: 0x3498db, transparent: true, opacity: 0.15 });
+        const matMech = new THREE.MeshPhongMaterial({ color: 0x111111 });
+        const matChrome = new THREE.MeshPhongMaterial({ color: 0xffffff });
+        const matRock = new THREE.MeshPhongMaterial({ color: 0x666666, flatShading: true });
+
+        const worldGroup = new THREE.Group();
+        scene.add(worldGroup);
+
+        const totalSize = (CONFIG.gridSize - 1) * CONFIG.gridSpacing;
+        const startOffset = -totalSize / 2;
+        const gridLines = [startOffset, 0, startOffset + totalSize];
+        const rocks = [];
+
+        function createWall(x, z, w, d) {
+            const bGeo = new THREE.BoxGeometry(w, CONFIG.borderHeight, d);
+            const m = new THREE.Mesh(bGeo, matBorder);
+            m.position.set(x, CONFIG.borderHeight / 2, z);
+            worldGroup.add(m);
+        }
+
+        function createRock(x, z) {
+            const radius = 0.5 + Math.random() * 2.0;
+            const geo = new THREE.DodecahedronGeometry(radius, 0);
+            const rock = new THREE.Mesh(geo, matRock);
+            rock.position.set(x, radius * 0.4, z); 
+            rock.rotation.set(Math.random(), Math.random(), Math.random());
+            rock.castShadow = true;
+            rock.receiveShadow = true;
+            rock.userData.radius = radius;
+            worldGroup.add(rock);
+            rocks.push(rock);
+        }
+
+        gridLines.forEach(pos => {
+            const roadH = new THREE.Mesh(new THREE.PlaneGeometry(totalSize + CONFIG.roadWidth, CONFIG.roadWidth), matRoad);
+            roadH.rotation.x = -Math.PI / 2; roadH.position.set(0, 0, pos);
+            worldGroup.add(roadH);
+
+            const roadV = new THREE.Mesh(new THREE.PlaneGeometry(CONFIG.roadWidth, totalSize + CONFIG.roadWidth), matRoad);
+            roadV.rotation.x = -Math.PI / 2; roadV.position.set(pos, 0, 0);
+            worldGroup.add(roadV);
+
+            const lineW = 0.5, lineL = 8, gap = 8;
+            const num = Math.floor((totalSize + CONFIG.roadWidth) / (lineL + gap));
+            for(let i = 0; i < num; i++) {
+                const off = (i * (lineL + gap)) - ((totalSize + CONFIG.roadWidth) / 2) + lineL;
+                const lH = new THREE.Mesh(new THREE.PlaneGeometry(lineL, lineW), matLine);
+                lH.rotation.x = -Math.PI / 2; lH.position.set(off, 0.05, pos);
+                worldGroup.add(lH);
+                const lV = new THREE.Mesh(new THREE.PlaneGeometry(lineW, lineL), matLine);
+                lV.rotation.x = -Math.PI / 2; lV.position.set(pos, 0.05, off);
+                worldGroup.add(lV);
+            }
+
+            for(let j = 0; j < 15; j++) {
+                const rOffset = (Math.random() - 0.5) * totalSize;
+                const rSide = (Math.random() - 0.5) * (CONFIG.roadWidth - 4);
+                if (Math.abs(rOffset % CONFIG.gridSpacing) > 15) createRock(rOffset, pos + rSide);
+                if (Math.abs(rOffset % CONFIG.gridSpacing) > 15) createRock(pos + rSide, rOffset);
+            }
+        });
+
+        const halfR = CONFIG.roadWidth / 2;
+        const bHalf = CONFIG.borderWidth / 2;
+        const wallPos = halfR + bHalf;
+        const perimeterLen = totalSize + CONFIG.roadWidth + (CONFIG.borderWidth * 2);
+
+        createWall(0, startOffset - wallPos, perimeterLen, CONFIG.borderWidth);
+        createWall(0, (startOffset + totalSize) + wallPos, perimeterLen, CONFIG.borderWidth);
+        createWall(startOffset - wallPos, 0, CONFIG.borderWidth, perimeterLen);
+        createWall((startOffset + totalSize) + wallPos, 0, CONFIG.borderWidth, perimeterLen);
+
+        const islandSize = CONFIG.gridSpacing - CONFIG.roadWidth;
+        const islandHalf = islandSize / 2;
+        for (let ix = 0; ix < CONFIG.gridSize - 1; ix++) {
+            for (let iz = 0; iz < CONFIG.gridSize - 1; iz++) {
+                const cx = startOffset + ix * CONFIG.gridSpacing + (CONFIG.gridSpacing / 2);
+                const cz = startOffset + iz * CONFIG.gridSpacing + (CONFIG.gridSpacing / 2);
+                createWall(cx, cz - islandHalf - bHalf, islandSize, CONFIG.borderWidth);
+                createWall(cx, cz + islandHalf + bHalf, islandSize, CONFIG.borderWidth);
+                createWall(cx - islandHalf - bHalf, cz, CONFIG.borderWidth, islandSize);
+                createWall(cx + islandHalf + bHalf, cz, CONFIG.borderWidth, islandSize);
+            }
+        }
+
+        const grass = new THREE.Mesh(new THREE.PlaneGeometry(5000, 5000), new THREE.MeshPhongMaterial({ color: 0x1b4d3e }));
+        grass.rotation.x = -Math.PI / 2; grass.position.y = -0.1;
+        scene.add(grass);
+
+        // --- Vehicle ---
+        const car = new THREE.Group();
+        scene.add(car);
+        const body = new THREE.Mesh(new THREE.BoxGeometry(2.4, 0.4, 4.8), matChassis);
+        body.position.y = 0.7; car.add(body);
+
+        const createWheel = (x, z) => {
+            const p = new THREE.Group(); p.position.set(x, 0.55, z);
+            const m = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.55, 0.5, 32), matMech);
+            m.rotation.z = Math.PI / 2; p.add(m); car.add(p);
+            return { pivot: p, mesh: m };
+        };
+        const fl = createWheel(-1.2, 1.8); const fr = createWheel(1.2, 1.8);
+        const rl = createWheel(-1.2, -1.8); const rr = createWheel(1.2, -1.8);
+
+        const driverX = -0.75; 
+        const rack = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 2.4), matChrome);
+        rack.rotation.z = Math.PI / 2; rack.position.set(0, 0.7, 1.8); car.add(rack);
+        const column = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 1.4), matChrome);
+        column.position.set(driverX, 1.15, 1.2); column.rotation.x = -Math.PI / 4; car.add(column);
+
+        const steerWheelGroup = new THREE.Group();
+        const rim = new THREE.Mesh(new THREE.TorusGeometry(0.35, 0.05, 16, 32), matMech);
+        steerWheelGroup.add(rim);
+        const spoke1 = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.07, 0.03), matMech); steerWheelGroup.add(spoke1);
+        const spoke2 = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.35, 0.03), matMech); spoke2.position.y = -0.17; steerWheelGroup.add(spoke2);
+        steerWheelGroup.position.set(driverX, 1.65, 0.8); steerWheelGroup.rotation.x = Math.PI / 4; car.add(steerWheelGroup);
+
+        const tieRodL = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.6), matMech);
+        tieRodL.rotation.z = Math.PI / 2; tieRodL.position.set(-0.8, 0.7, 1.8); car.add(tieRodL);
+        const tieRodR = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.6), matMech);
+        tieRodR.rotation.z = Math.PI / 2; tieRodR.position.set(0.8, 0.7, 1.8); car.add(tieRodR);
+
+        // --- Inputs ---
+        const keys = { w: false, s: false, space: false, a: false, d: false };
+        let pedalAccel = false, pedalBrake = false;
+        let speed = 0, steerAngle = 0, isDraggingWheel = false, lastAngle = 0;
+
+        window.addEventListener('keydown', (e) => { keys[e.key.toLowerCase() === ' ' ? 'space' : e.key.toLowerCase()] = true; });
+        window.addEventListener('keyup', (e) => { keys[e.key.toLowerCase() === ' ' ? 'space' : e.key.toLowerCase()] = false; });
+
+        const setupPedal = (id, setter) => {
+            const el = document.getElementById(id);
+            const start = (e) => { e.preventDefault(); el.classList.add('active'); setter(true); };
+            const end = (e) => { e.preventDefault(); el.classList.remove('active'); setter(false); };
+            el.addEventListener('touchstart', start, {passive: false}); el.addEventListener('touchend', end);
+            el.addEventListener('mousedown', start); el.addEventListener('mouseup', end); el.addEventListener('mouseleave', end);
+        };
+        setupPedal('pedal-accel', (v) => pedalAccel = v);
+        setupPedal('pedal-brake', (v) => pedalBrake = v);
+
+        const wheelCont = document.getElementById('steering-container'), wheelEl = document.getElementById('ui-wheel');
+        const getAngle = (clientX, clientY) => {
+            const rect = wheelCont.getBoundingClientRect();
+            return Math.atan2(clientY - (rect.top + rect.height / 2), clientX - (rect.left + rect.width / 2));
+        };
+        const onWheelStart = (e) => {
+            isDraggingWheel = true; const pos = e.touches ? e.touches[0] : e;
+            lastAngle = getAngle(pos.clientX, pos.clientY);
+            if(e.touches) e.preventDefault();
+        };
+        const onWheelMove = (e) => {
+            if(!isDraggingWheel) return; const pos = e.touches ? e.touches[0] : e;
+            const currentAngle = getAngle(pos.clientX, pos.clientY);
+            let delta = currentAngle - lastAngle;
+            if (delta > Math.PI) delta -= Math.PI * 2; if (delta < -Math.PI) delta += Math.PI * 2;
+            
+            steerAngle -= delta * 1.5;
+            steerAngle = Math.max(-CONFIG.maxSteer, Math.min(CONFIG.maxSteer, steerAngle));
+            lastAngle = currentAngle;
+        };
+        wheelCont.addEventListener('mousedown', onWheelStart); window.addEventListener('mousemove', onWheelMove);
+        window.addEventListener('mouseup', () => isDraggingWheel = false);
+        wheelCont.addEventListener('touchstart', onWheelStart, {passive: false}); window.addEventListener('touchmove', onWheelMove, {passive: false});
+        window.addEventListener('touchend', () => isDraggingWheel = false);
+
+        function update() {
+            if (keys.w || pedalAccel) speed += CONFIG.acceleration;
+            if (keys.s) speed -= CONFIG.acceleration;
+            if (keys.space || pedalBrake) {
+                if (speed > 0) speed = Math.max(0, speed - CONFIG.brakingPower);
+                else if (speed < 0) speed = Math.min(0, speed + CONFIG.brakingPower);
+            }
+            speed *= (1 - CONFIG.friction);
+            speed = Math.min(Math.max(speed, -CONFIG.maxSpeed/2), CONFIG.maxSpeed);
+
+            if (keys.a) steerAngle += 0.06; if (keys.d) steerAngle -= 0.06;
+            steerAngle = Math.max(-CONFIG.maxSteer, Math.min(CONFIG.maxSteer, steerAngle));
+
+            const v = speed * 0.01;
+            car.rotation.y += steerAngle * (speed * 0.00085);
+            
+            let nextX = car.position.x + Math.sin(car.rotation.y) * v;
+            let nextZ = car.position.z + Math.cos(car.rotation.y) * v;
+
+            const clampLimit = CONFIG.roadClamping;
+            const junctionZone = CONFIG.roadWidth / 2 + 1.5; 
+
+            const getRoad = (val) => {
+                for(let p of gridLines) {
+                    const d = Math.abs(val - p);
+                    if(d < junctionZone) return { center: p, dist: d };
+                }
+                return null;
+            };
+
+            const roadX = getRoad(nextX);
+            const roadZ = getRoad(nextZ);
+
+            if (roadX && !roadZ) {
+                nextX = Math.max(roadX.center - clampLimit, Math.min(roadX.center + clampLimit, nextX));
+            } else if (roadZ && !roadX) {
+                nextZ = Math.max(roadZ.center - clampLimit, Math.min(roadZ.center + clampLimit, nextZ));
+            } else if (!roadX && !roadZ) {
+                const lx = getRoad(car.position.x), lz = getRoad(car.position.z);
+                if (lx) nextX = Math.max(lx.center - clampLimit, Math.min(lx.center + clampLimit, nextX));
+                if (lz) nextZ = Math.max(lz.center - clampLimit, Math.min(lz.center + clampLimit, nextZ));
+            }
+
+            let hitRock = false;
+            rocks.forEach(rock => {
+                const dx = nextX - rock.position.x;
+                const dz = nextZ - rock.position.z;
+                const dist = Math.sqrt(dx*dx + dz*dz);
+                const combinedRadius = 1.3 + rock.userData.radius;
+                if (dist < combinedRadius) hitRock = true;
+            });
+
+            if (hitRock) {
+                speed *= -0.3;
+                document.getElementById('status').innerText = "ROCK HIT!";
+                document.getElementById('status').style.color = "#ff0000";
+            } else {
+                car.position.x = nextX;
+                car.position.z = nextZ;
+                document.getElementById('status').innerText = "STEERING SYNCED";
+                document.getElementById('status').style.color = "#2ecc71";
+            }
+
+            const mapLimit = totalSize / 2 + clampLimit;
+            car.position.x = Math.max(-mapLimit, Math.min(mapLimit, car.position.x));
+            car.position.z = Math.max(-mapLimit, Math.min(mapLimit, car.position.z));
+
+            // Visual Wheel Synchronization
+            fl.pivot.rotation.y = steerAngle; fr.pivot.rotation.y = steerAngle;
+            const roll = v / 0.55;
+            fl.mesh.rotation.x += roll; fr.mesh.rotation.x += roll;
+            rl.mesh.rotation.x += roll; rr.mesh.rotation.x += roll;
+            
+            const rackX = steerAngle * 0.7;
+            rack.position.x = -rackX; 
+            tieRodL.position.x = -0.8 - rackX; 
+            tieRodR.position.x = 0.8 - rackX;
+            
+            // --- FIXING FLIPPED 3D DISPLAY ---
+            // steerAngle > 0 means Left Turn.
+            // In Three.js, positive rotation around Z is CCW (Left). 
+            // Previous logic was rotating CCW, but user reported it as flipped relative to UI.
+            // We now invert the model rotation signs to match the controller feel.
+            steerWheelGroup.rotation.z = -steerAngle * 3.0; 
+            column.rotation.y = -steerAngle * 3.0;
+
+            // UI Wheel: rotate CCW for positive steerAngle
+            wheelEl.style.transform = `rotate(${-steerAngle * (180/Math.PI)}deg)`;
+
+            const camPos = new THREE.Vector3(driverX, 1.85, -0.9).applyQuaternion(car.quaternion);
+            camera.position.copy(car.position).add(camPos);
+            const lookAt = new THREE.Vector3(driverX, 0.45, 25).applyQuaternion(car.quaternion);
+            camera.lookAt(car.position.clone().add(lookAt));
+
+            document.getElementById('speed-val').innerText = Math.round(Math.abs(speed));
+            document.getElementById('steer-val').innerText = Math.round(steerAngle * (180/Math.PI));
+        }
+
+        function animate() { requestAnimationFrame(animate); update(); renderer.render(scene, camera); }
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+        window.onload = animate;
+    </script>
+</body>
+</html>
