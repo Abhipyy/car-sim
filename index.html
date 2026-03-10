@@ -1,0 +1,508 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>3D Car Mechanical - Mobile Pro Edition</title>
+    <style>
+        body { margin: 0; overflow: hidden; font-family: 'Segoe UI', sans-serif; background: #000; touch-action: none; }
+        
+        /* Start Overlay for Fullscreen */
+        #start-overlay {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.9);
+            color: white;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+            cursor: pointer;
+            text-align: center;
+            padding: 20px;
+        }
+        #start-overlay h1 { margin-bottom: 10px; font-size: 28px; color: #f1c40f; text-transform: uppercase; letter-spacing: 2px; }
+        #start-overlay p { font-size: 18px; opacity: 0.9; border: 2px solid #f1c40f; padding: 10px 20px; border-radius: 50px; }
+
+        /* Base GUI */
+        #gui {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            color: #333;
+            background: rgba(255, 255, 255, 0.95);
+            padding: 12px;
+            border-radius: 8px;
+            pointer-events: none;
+            border-left: 4px solid #f1c40f;
+            z-index: 10;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            width: 200px;
+            transition: all 0.3s ease;
+            display: none; /* Shown after start */
+        }
+        
+        .stat { margin-bottom: 3px; font-size: 13px; text-transform: uppercase; font-weight: bold; }
+        .stat span { color: #f39c12; }
+        
+        .action-btn {
+            pointer-events: auto;
+            margin-top: 8px;
+            padding: 8px 12px;
+            background: #34495e;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 11px;
+            font-weight: bold;
+            display: block;
+            width: 100%;
+        }
+        .action-btn:active { background: #2c3e50; }
+
+        #reset-btn {
+            position: absolute;
+            top: 35px;
+            right: 8px;
+            background: #e74c3c;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            width: 32px;
+            height: 32px;
+            font-size: 20px;
+            font-weight: bold;
+            cursor: pointer;
+            pointer-events: auto;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        }
+
+        #menu-btn {
+            position: absolute;
+            top: 4px;
+            right: 8px;
+            background: none;
+            border: none;
+            font-size: 24px;
+            font-weight: bold;
+            cursor: pointer;
+            pointer-events: auto;
+            color: #2c3e50;
+            line-height: 1;
+            padding: 0 4px;
+        }
+
+        #stats-display { display: block; }
+
+        /* Scrollable Settings Menu */
+        #slider-menu {
+            margin-top: 10px;
+            pointer-events: auto;
+            display: none;
+            max-height: 220px;
+            overflow-y: auto;
+            padding-right: 8px;
+        }
+        
+        #slider-menu-title {
+            font-weight: bold; font-size: 11px; margin-bottom: 12px;
+            border-bottom: 1px solid #ddd; padding-bottom: 4px; color: #2c3e50;
+        }
+        
+        #slider-menu::-webkit-scrollbar { width: 4px; }
+        #slider-menu::-webkit-scrollbar-track { background: rgba(0,0,0,0.05); border-radius: 10px; }
+        #slider-menu::-webkit-scrollbar-thumb { background: #bdc3c7; border-radius: 10px; }
+
+        .slider-group { margin-bottom: 12px; }
+        .slider-label {
+            font-size: 10px; font-weight: 800; display: block; margin-bottom: 4px;
+            color: #7f8c8d; text-transform: uppercase;
+        }
+        input[type=range] { width: 100%; cursor: pointer; height: 6px; background: #dfe6e9; border-radius: 5px; outline: none; }
+
+        /* Pedals container */
+        #pedal-container {
+            position: absolute;
+            bottom: 40px;
+            left: 40px;
+            display: none; /* Shown after start */
+            gap: 20px;
+            align-items: flex-end;
+            z-index: 100;
+            transition: all 0.3s ease;
+        }
+        .pedal {
+            width: 80px;
+            height: 130px;
+            background: rgba(30, 30, 30, 0.95);
+            border: 3px solid #fff;
+            border-radius: 12px;
+            color: #fff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            user-select: none;
+            touch-action: none;
+            text-align: center;
+            font-size: 14px;
+            cursor: pointer;
+        }
+        .pedal.active {
+            transform: scale(0.9) translateY(5px);
+            background: rgba(60, 60, 60, 1);
+            border-color: #f1c40f;
+        }
+        #pedal-brake { height: 100px; width: 120px; } 
+
+        /* Steering wheel controller */
+        #steering-container {
+            position: absolute;
+            bottom: 40px;
+            right: 40px;
+            width: 220px;
+            height: 220px;
+            z-index: 100;
+            user-select: none;
+            touch-action: none;
+            transition: all 0.3s ease;
+            display: none; /* Shown after start */
+        }
+        #ui-wheel {
+            width: 100%;
+            height: 100%;
+            background: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><circle cx="50" cy="50" r="46" fill="rgba(30,30,30,0.85)" stroke="white" stroke-width="4"/><circle cx="50" cy="50" r="38" fill="none" stroke="rgba(255,255,255,0.1)" stroke-width="1"/><line x1="50" y1="4" x2="50" y2="20" stroke="yellow" stroke-width="4"/><path d="M15 35 L85 35 M50 35 L50 90" stroke="white" stroke-width="6" fill="none" stroke-linecap="round"/><circle cx="50" cy="50" r="8" fill="white"/></svg>') no-repeat center;
+            background-size: contain;
+            pointer-events: none;
+        }
+
+        /* Mobile Adjustments */
+        @media (max-width: 768px) {
+            #gui { top: 10px; left: 10px; width: 150px; padding: 8px; }
+            #slider-menu { max-height: 140px; }
+            .stat { font-size: 10px; }
+            .action-btn { font-size: 9px; padding: 6px 8px; }
+            #reset-btn { top: 30px; width: 28px; height: 28px; font-size: 16px; }
+            #menu-btn { font-size: 20px; top: 2px; }
+            #pedal-container { bottom: 20px; left: 20px; gap: 12px; }
+            .pedal { width: 60px; height: 100px; font-size: 12px; border-width: 2px; }
+            #pedal-brake { height: 80px; width: 90px; }
+            #steering-container { bottom: 20px; right: 20px; width: 125px; height: 125px; }
+        }
+
+        canvas { display: block; }
+    </style>
+</head>
+<body>
+
+    <div id="start-overlay">
+        <h1>CAR SIMULATOR</h1>
+        <p>TAP TO START</p>
+    </div>
+
+    <div id="gui">
+        <button id="menu-btn" title="Settings">⋮</button>
+        <button id="reset-btn" title="Reset Position (R)">↺</button>
+        
+        <div id="stats-display">
+            <div class="stat">Speed: <span id="speed-val">0</span> / <span id="max-speed-ui">30</span></div>
+            <div class="stat">Steer: <span id="steer-val">0</span>°</div>
+            <div class="stat">Status: <span id="status" style="color:#2ecc71">OK</span></div>
+        </div>
+        
+        <div id="slider-menu">
+            <div id="slider-menu-title">SETTINGS</div>
+            <div class="slider-group">
+                <span class="slider-label">SPEED LIMITER: <span id="limit-val">30</span></span>
+                <input type="range" id="limit-slider" min="10" max="60" step="5" value="30">
+            </div>
+            <div class="slider-group">
+                <span class="slider-label">STEER SENSITIVITY: <span id="sens-val">1.0</span>x</span>
+                <input type="range" id="sens-slider" min="0.1" max="1.0" step="0.1" value="1.0">
+            </div>
+            <div class="slider-group">
+                <span class="slider-label">ROCK DENSITY: <span id="density-val">15</span></span>
+                <input type="range" id="density-slider" min="0" max="40" step="1" value="15">
+            </div>
+            <button id="toggle-btn" class="action-btn">TOGGLE VISIBILITY (O)</button>
+        </div>
+    </div>
+
+    <div id="pedal-container">
+        <div id="pedal-accel" class="pedal">ACC</div>
+        <div id="pedal-brake" class="pedal">BRK /<br>REV</div>
+    </div>
+
+    <div id="steering-container">
+        <div id="ui-wheel"></div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+
+    <script>
+        // --- Fullscreen and Start Logic ---
+        const startOverlay = document.getElementById('start-overlay');
+        startOverlay.addEventListener('click', () => {
+            const docEl = window.document.documentElement;
+            const requestFullScreen = docEl.requestFullscreen || docEl.mozRequestFullScreen || docEl.webkitRequestFullScreen || docEl.msRequestFullscreen;
+            
+            if (requestFullScreen) {
+                try {
+                    const fsPromise = requestFullScreen.call(docEl);
+                    if (fsPromise) fsPromise.catch(() => {});
+                } catch (e) {}
+            }
+            
+            startOverlay.style.display = 'none';
+            document.getElementById('gui').style.display = 'block';
+            document.getElementById('pedal-container').style.display = 'flex';
+            document.getElementById('steering-container').style.display = 'block';
+        });
+
+        // --- Configuration ---
+        const CONFIG = {
+            acceleration: 1.2,
+            brakingPower: 1.8,     
+            friction: 0.03,        
+            maxSpeed: 30,          
+            maxReverseSpeed: -15,
+            maxSteer: 80 * (Math.PI / 180), 
+            steerSensitivity: 1.0, 
+            rockDensity: 15,
+            fov: 65,
+            roadWidth: 18,          
+            gridSpacing: 120, 
+            gridSize: 3,
+            borderHeight: 4.5,     
+            borderWidth: 1.5,       
+            roadClamping: 7.4,
+            carRadius: 2.2 
+        };
+
+        // --- Three.js Setup ---
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x87ceeb);
+        scene.fog = new THREE.Fog(0x87ceeb, 200, 800);
+        const camera = new THREE.PerspectiveCamera(CONFIG.fov, window.innerWidth / window.innerHeight, 0.1, 2000);
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.shadowMap.enabled = true;
+        document.body.appendChild(renderer.domElement);
+        scene.add(new THREE.AmbientLight(0xffffff, 0.7));
+        const sun = new THREE.DirectionalLight(0xffffff, 1.2);
+        sun.position.set(-200, 300, 100);
+        sun.castShadow = true;
+        scene.add(sun);
+
+        const matRoad = new THREE.MeshPhongMaterial({ color: 0x111111 });
+        const matBorder = new THREE.MeshPhongMaterial({ color: 0x000000 });
+        const matLine = new THREE.MeshBasicMaterial({ color: 0xffff00 }); 
+        const matChassis = new THREE.MeshPhongMaterial({ color: 0x3498db, transparent: true, opacity: 0.15 });
+        const matMech = new THREE.MeshPhongMaterial({ color: 0x8B4513 }); 
+        const matChrome = new THREE.MeshPhongMaterial({ color: 0xffffff });
+        const matRock = new THREE.MeshPhongMaterial({ color: 0x666666, flatShading: true });
+
+        const worldGroup = new THREE.Group();
+        scene.add(worldGroup);
+        const totalSize = (CONFIG.gridSize - 1) * CONFIG.gridSpacing;
+        const startOffset = -totalSize / 2;
+        const gridLines = [startOffset, 0, startOffset + totalSize];
+        const rocks = [];
+        let obstaclesEnabled = true;
+
+        function createWall(x, z, w, d) {
+            const bGeo = new THREE.BoxGeometry(w, CONFIG.borderHeight, d);
+            const m = new THREE.Mesh(bGeo, matBorder);
+            m.position.set(x, CONFIG.borderHeight / 2, z);
+            worldGroup.add(m);
+        }
+        function createRock(x, z) {
+            const radius = 0.5 + Math.random() * 2.0;
+            const geo = new THREE.DodecahedronGeometry(radius, 0);
+            const rock = new THREE.Mesh(geo, matRock);
+            rock.position.set(x, radius * 0.4, z); 
+            rock.rotation.set(Math.random(), Math.random(), Math.random());
+            rock.castShadow = true; rock.receiveShadow = true;
+            rock.userData.radius = radius; worldGroup.add(rock); rocks.push(rock);
+        }
+        function generateAllRocks() {
+            rocks.forEach(rock => worldGroup.remove(rock)); rocks.length = 0;
+            gridLines.forEach(pos => {
+                for(let j = 0; j < CONFIG.rockDensity; j++) {
+                    const rOffset = (Math.random() - 0.5) * totalSize;
+                    const rSide = (Math.random() - 0.5) * (CONFIG.roadWidth - 5);
+                    const isNearIntersection = Math.abs(rOffset % CONFIG.gridSpacing) < 15;
+                    const isNearStart = Math.abs(rOffset) < 12 && Math.abs(pos) < 12;
+                    if (!isNearIntersection && !isNearStart) {
+                        createRock(rOffset, pos + rSide); createRock(pos + rSide, rOffset);
+                    }
+                }
+            });
+            rocks.forEach(rock => rock.visible = obstaclesEnabled);
+        }
+        
+        // Build roads and Yellow dashed lines
+        gridLines.forEach(pos => {
+            const roadH = new THREE.Mesh(new THREE.PlaneGeometry(totalSize + CONFIG.roadWidth, CONFIG.roadWidth), matRoad);
+            roadH.rotation.x = -Math.PI / 2; roadH.position.set(0, 0, pos); worldGroup.add(roadH);
+            
+            const roadV = new THREE.Mesh(new THREE.PlaneGeometry(CONFIG.roadWidth, totalSize + CONFIG.roadWidth), matRoad);
+            roadV.rotation.x = -Math.PI / 2; roadV.position.set(pos, 0, 0); worldGroup.add(roadV);
+
+            // Added: Dash logic for yellow center lines
+            const lineW = 0.5, lineL = 8, gap = 8;
+            const numSegments = Math.floor((totalSize + CONFIG.roadWidth) / (lineL + gap));
+            for(let i = 0; i < numSegments; i++) {
+                const off = (i * (lineL + gap)) - ((totalSize + CONFIG.roadWidth) / 2) + lineL;
+                
+                // Horizontal Road Lines
+                const lH = new THREE.Mesh(new THREE.PlaneGeometry(lineL, lineW), matLine);
+                lH.rotation.x = -Math.PI / 2; 
+                lH.position.set(off, 0.05, pos); // 0.05 to lift above road surface
+                worldGroup.add(lH);
+
+                // Vertical Road Lines
+                const lV = new THREE.Mesh(new THREE.PlaneGeometry(lineW, lineL), matLine);
+                lV.rotation.x = -Math.PI / 2; 
+                lV.position.set(pos, 0.05, off);
+                worldGroup.add(lV);
+            }
+        });
+
+        // Outer boundaries
+        const wallPos = CONFIG.roadWidth / 2 + CONFIG.borderWidth / 2;
+        createWall(0, startOffset - wallPos, totalSize + CONFIG.roadWidth + 3, CONFIG.borderWidth);
+        createWall(0, (startOffset + totalSize) + wallPos, totalSize + CONFIG.roadWidth + 3, CONFIG.borderWidth);
+        createWall(startOffset - wallPos, 0, CONFIG.borderWidth, totalSize + CONFIG.roadWidth + 3);
+        createWall((startOffset + totalSize) + wallPos, 0, CONFIG.borderWidth, totalSize + CONFIG.roadWidth + 3);
+        
+        const grass = new THREE.Mesh(new THREE.PlaneGeometry(5000, 5000), new THREE.MeshPhongMaterial({ color: 0x1b4d3e }));
+        grass.rotation.x = -Math.PI / 2; grass.position.y = -0.1; scene.add(grass);
+        generateAllRocks();
+
+        // --- Car ---
+        const car = new THREE.Group();
+        scene.add(car);
+        const body = new THREE.Mesh(new THREE.BoxGeometry(2.4, 0.4, 4.8), matChassis);
+        body.position.y = 0.7; car.add(body);
+        const createWheel = (x, z) => {
+            const p = new THREE.Group(); p.position.set(x, 0.55, z);
+            const m = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.55, 0.5, 32), matMech);
+            m.rotation.z = Math.PI / 2; p.add(m); car.add(p); return { pivot: p, mesh: m };
+        };
+        const fl = createWheel(-1.2, 1.8); const fr = createWheel(1.2, 1.8);
+        const rl = createWheel(-1.2, -1.8); const rr = createWheel(1.2, -1.8);
+        const driverX = -0.75; 
+        const column = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 1.4), matChrome);
+        column.position.set(driverX, 1.15, 1.2); column.rotation.x = -Math.PI / 4; car.add(column);
+        const steerWheelGroup = new THREE.Group();
+        const rim = new THREE.Mesh(new THREE.TorusGeometry(0.35, 0.05, 16, 32), matMech);
+        steerWheelGroup.add(rim);
+        const spoke1 = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.07, 0.03), matMech); steerWheelGroup.add(spoke1);
+        const spoke2 = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.35, 0.03), matMech); spoke2.position.y = -0.17; steerWheelGroup.add(spoke2);
+        steerWheelGroup.position.set(driverX, 1.65, 0.8); steerWheelGroup.rotation.x = Math.PI / 4; car.add(steerWheelGroup);
+
+        // --- MULTI-TOUCH CONTROLLER LOGIC ---
+        const inputs = { w: false, space: false, a: false, d: false };
+        let pedalAccelActive = false, pedalBrakeActive = false;
+        let speed = 0, steerAngle = 0;
+        let steerPointerId = null, steerLastAngle = 0;
+
+        window.addEventListener('keydown', (e) => { 
+            const k = e.key.toLowerCase(); if (k === 'w') inputs.w = true; if (k === ' ') inputs.space = true;
+            if (k === 'a') inputs.a = true; if (k === 'd') inputs.d = true;
+            if (k === 'o') toggleObstacles(); if (k === 'r') redoPosition();
+        });
+        window.addEventListener('keyup', (e) => { 
+            const k = e.key.toLowerCase(); if (k === 'w') inputs.w = false; if (k === ' ') inputs.space = false;
+            if (k === 'a') inputs.a = false; if (k === 'd') inputs.d = false;
+        });
+
+        const setupPedal = (id, setter) => {
+            const el = document.getElementById(id);
+            el.addEventListener('pointerdown', (e) => { e.preventDefault(); el.classList.add('active'); setter(true); el.setPointerCapture(e.pointerId); });
+            el.addEventListener('pointerup', (e) => { el.classList.remove('active'); setter(false); });
+            el.addEventListener('pointercancel', (e) => { el.classList.remove('active'); setter(false); });
+            el.addEventListener('pointerleave', (e) => { el.classList.remove('active'); setter(false); });
+        };
+        setupPedal('pedal-accel', (v) => pedalAccelActive = v);
+        setupPedal('pedal-brake', (v) => pedalBrakeActive = v);
+
+        const wheelCont = document.getElementById('steering-container'), wheelEl = document.getElementById('ui-wheel');
+        const getSteerAngleFromCoords = (clientX, clientY) => {
+            const rect = wheelCont.getBoundingClientRect();
+            return Math.atan2(clientY - (rect.top + rect.height / 2), clientX - (rect.left + rect.width / 2));
+        };
+        wheelCont.addEventListener('pointerdown', (e) => { if (steerPointerId !== null) return; steerPointerId = e.pointerId; steerLastAngle = getSteerAngleFromCoords(e.clientX, e.clientY); wheelCont.setPointerCapture(e.pointerId); });
+        window.addEventListener('pointermove', (e) => {
+            if (e.pointerId !== steerPointerId) return;
+            const currentAngle = getSteerAngleFromCoords(e.clientX, e.clientY);
+            let delta = currentAngle - steerLastAngle;
+            if (delta > Math.PI) delta -= Math.PI * 2; if (delta < -Math.PI) delta += Math.PI * 2;
+            steerAngle -= delta * 1.5 * CONFIG.steerSensitivity;
+            steerAngle = Math.max(-CONFIG.maxSteer, Math.min(CONFIG.maxSteer, steerAngle));
+            steerLastAngle = currentAngle;
+        });
+        window.addEventListener('pointerup', (e) => { if (e.pointerId === steerPointerId) steerPointerId = null; });
+        window.addEventListener('pointercancel', (e) => { if (e.pointerId === steerPointerId) steerPointerId = null; });
+
+        function redoPosition() { car.position.set(0, 0, 0); car.rotation.y = 0; speed = 0; steerAngle = 0; document.getElementById('status').innerText = "OK"; document.getElementById('status').style.color = "#2ecc71"; }
+        document.getElementById('reset-btn').addEventListener('click', redoPosition);
+        function toggleObstacles() { obstaclesEnabled = !obstaclesEnabled; rocks.forEach(rock => rock.visible = obstaclesEnabled); document.getElementById('status').innerText = obstaclesEnabled ? "OBSTACLES ON" : "CLEAR"; }
+        document.getElementById('toggle-btn').addEventListener('click', toggleObstacles);
+
+        const menuBtn = document.getElementById('menu-btn'), sliderMenu = document.getElementById('slider-menu'), statsDisplay = document.getElementById('stats-display');
+        menuBtn.addEventListener('click', () => {
+            const open = sliderMenu.style.display === 'block';
+            sliderMenu.style.display = open ? 'none' : 'block';
+            statsDisplay.style.display = open ? 'block' : 'none';
+        });
+
+        document.getElementById('limit-slider').addEventListener('input', (e) => { CONFIG.maxSpeed = parseInt(e.target.value); document.getElementById('limit-val').innerText = CONFIG.maxSpeed; document.getElementById('max-speed-ui').innerText = CONFIG.maxSpeed; });
+        document.getElementById('sens-slider').addEventListener('input', (e) => { CONFIG.steerSensitivity = parseFloat(e.target.value); document.getElementById('sens-val').innerText = CONFIG.steerSensitivity.toFixed(1); });
+        document.getElementById('density-slider').addEventListener('input', (e) => { CONFIG.rockDensity = parseInt(e.target.value); document.getElementById('density-val').innerText = CONFIG.rockDensity; generateAllRocks(); });
+
+        function update() {
+            if (inputs.w || pedalAccelActive) speed += CONFIG.acceleration;
+            if (inputs.space || pedalBrakeActive) {
+                if (speed > 0.5) speed -= CONFIG.brakingPower;
+                else speed -= CONFIG.acceleration * 0.8;
+            }
+            speed *= (1 - CONFIG.friction);
+            speed = Math.min(Math.max(speed, CONFIG.maxReverseSpeed), CONFIG.maxSpeed);
+            if (inputs.a) steerAngle += 0.06 * CONFIG.steerSensitivity; 
+            if (inputs.d) steerAngle -= 0.06 * CONFIG.steerSensitivity;
+            steerAngle = Math.max(-CONFIG.maxSteer, Math.min(CONFIG.maxSteer, steerAngle));
+            const v = speed * 0.01; car.rotation.y += steerAngle * (speed * 0.00085);
+            let nextX = car.position.x + Math.sin(car.rotation.y) * v;
+            let nextZ = car.position.z + Math.cos(car.rotation.y) * v;
+            const clampLimit = CONFIG.roadClamping, junctionZone = CONFIG.roadWidth / 2 + 1.5; 
+            const getRoad = (val) => { for(let p of gridLines) if(Math.abs(val - p) < junctionZone) return { center: p }; return null; };
+            const roadX = getRoad(nextX), roadZ = getRoad(nextZ);
+            if (roadX && !roadZ) nextX = Math.max(roadX.center - clampLimit, Math.min(roadX.center + clampLimit, nextX));
+            else if (roadZ && !roadX) nextZ = Math.max(roadZ.center - clampLimit, Math.min(roadZ.center + clampLimit, nextZ));
+            let hitRock = false;
+            if (obstaclesEnabled) { rocks.forEach(rock => { const dist = Math.sqrt((nextX - rock.position.x)**2 + (nextZ - rock.position.z)**2); if (dist < 1.3 + rock.userData.radius) hitRock = true; }); }
+            if (hitRock) speed *= -0.4; else { car.position.x = nextX; car.position.z = nextZ; }
+            fl.pivot.rotation.y = steerAngle; fr.pivot.rotation.y = steerAngle;
+            const roll = v / 0.55; fl.mesh.rotation.x += roll; fr.mesh.rotation.x += roll; rl.mesh.rotation.x += roll; rr.mesh.rotation.x += roll;
+            steerWheelGroup.rotation.z = -steerAngle * 3.0; column.rotation.y = -steerAngle * 3.0;
+            wheelEl.style.transform = `rotate(${-steerAngle * (180/Math.PI)}deg)`;
+            const camPos = new THREE.Vector3(driverX, 1.85, -0.9).applyQuaternion(car.quaternion);
+            camera.position.copy(car.position).add(camPos);
+            camera.lookAt(car.position.clone().add(new THREE.Vector3(driverX, 0.45, 25).applyQuaternion(car.quaternion)));
+            document.getElementById('speed-val').innerText = Math.round(Math.abs(speed));
+            document.getElementById('steer-val').innerText = Math.round(steerAngle * (180/Math.PI));
+        }
+
+        function animate() { requestAnimationFrame(animate); update(); renderer.render(scene, camera); }
+        window.addEventListener('resize', () => { camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth, window.innerHeight); });
+        animate();
+    </script>
+</body>
+</html>
