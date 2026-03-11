@@ -18,6 +18,7 @@
             user-select: none;
             -webkit-tap-highlight-color: transparent;
             -webkit-touch-callout: none;
+            /* Default to none to stop browser zoom/scroll interference */
             touch-action: none;
         }
 
@@ -50,7 +51,7 @@
         #start-overlay p { font-size: 18px; opacity: 0.9; border: 2px solid #f1c40f; padding: 10px 30px; border-radius: 50px; transition: 0.3s; }
         #orientation-msg { color: #e74c3c; margin-top: 20px; font-weight: bold; display: none; }
 
-        /* Base GUI - Desktop/Large Tablet Default */
+        /* Base GUI - Desktop Default */
         #gui {
             position: absolute;
             top: var(--safe-top);
@@ -128,6 +129,8 @@
             max-height: 180px;
             overflow-y: auto;
             padding-right: 8px;
+            /* Allow vertical scrolling by swiping on mobile */
+            touch-action: pan-y !important; 
         }
         
         #slider-menu::-webkit-scrollbar { width: 4px; }
@@ -137,7 +140,7 @@
         .slider-label { font-size: 10px; font-weight: 800; display: block; margin-bottom: 4px; color: #7f8c8d; text-transform: uppercase; }
         input[type=range] { width: 100%; cursor: pointer; height: 6px; background: #dfe6e9; border-radius: 5px; outline: none; pointer-events: auto; }
 
-        /* Pedals container - Desktop/Large Tablet Default */
+        /* Pedals container - Desktop Default */
         #pedal-container {
             position: absolute;
             bottom: 40px;
@@ -169,7 +172,7 @@
         }
         #pedal-brake { width: 130px; height: 110px; } 
 
-        /* Steering wheel controller - Desktop/Large Tablet Default */
+        /* Steering wheel controller - Desktop Default */
         #steering-container {
             position: absolute;
             bottom: 40px;
@@ -188,42 +191,39 @@
             pointer-events: none;
         }
 
-        /* --- MOBILE ADJUSTMENTS (Phones Landscape/Portrait) --- */
-        /* Applied when width is less than 950px OR height is very small (Landscape) */
+        /* --- UPDATED MOBILE ADJUSTMENTS --- */
         @media (max-width: 950px), (max-height: 500px) {
             #gui { 
-                top: 10px; 
-                left: 10px; 
-                width: 150px; 
-                padding: 8px; 
+                top: 15px; 
+                left: 15px; 
+                width: 170px; 
+                padding: 10px; 
             }
-            #slider-menu { max-height: 140px; }
-            .stat { font-size: 10px; }
-            .action-btn { font-size: 9px; padding: 6px 8px; }
-            #reset-btn { top: 30px; width: 28px; height: 28px; font-size: 16px; }
-            #menu-btn { font-size: 20px; top: 2px; }
+            #slider-menu { max-height: 150px; }
+            .stat { font-size: 11px; }
+            .action-btn { font-size: 10px; padding: 7px 10px; }
+            #reset-btn { top: 35px; width: 30px; height: 30px; font-size: 18px; }
             
-            /* Reduced margin to 10px to match GUI Block */
             #pedal-container { 
-                bottom: 10px; 
-                left: 10px; 
-                gap: 10px; 
+                bottom: 15px; 
+                left: 15px; 
+                gap: 12px; 
             }
-            /* Significantly reduced pedal sizes for mobile */
+            /* Moderately sized pedals for easier mobile control */
             .pedal { 
-                width: 50px; 
-                height: 85px; 
-                font-size: 11px; 
+                width: 65px; 
+                height: 110px; 
+                font-size: 12px; 
                 border-width: 2px; 
             }
-            #pedal-brake { height: 65px; width: 80px; }
+            #pedal-brake { height: 85px; width: 100px; }
             
-            /* Smaller Steering wheel for mobile */
+            /* Moderately sized steering for mobile landscape */
             #steering-container { 
-                bottom: 10px; 
-                right: 10px; 
-                width: 110px; 
-                height: 110px; 
+                bottom: 15px; 
+                right: 15px; 
+                width: 140px; 
+                height: 140px; 
             }
         }
 
@@ -249,7 +249,7 @@
         </div>
         
         <div id="slider-menu">
-            <div id="slider-menu-title">SETTINGS</div>
+            <div style="font-weight: bold; font-size: 11px; margin-bottom: 12px; border-bottom: 1px solid #ddd; padding-bottom: 4px; color: #2c3e50;">SETTINGS</div>
             <div class="slider-group">
                 <span class="slider-label">SPEED LIMITER: <span id="limit-val">30</span></span>
                 <input type="range" id="limit-slider" min="10" max="60" step="5" value="30">
@@ -313,14 +313,14 @@
                         await screen.orientation.lock('landscape').catch(() => {});
                     }
                 } catch (err) {
-                    console.warn("Fullscreen request failed: ", err.message);
+                    console.warn("Fullscreen request rejected.");
                 }
             }
         };
 
-        startOverlay.addEventListener('pointerdown', (e) => {
-            e.preventDefault();
-            enterFullscreen();
+        // Click event is generally the most robust "user gesture" for Fullscreen API
+        startOverlay.addEventListener('click', async () => {
+            await enterFullscreen();
             startOverlay.style.display = 'none';
             document.getElementById('gui').style.display = 'block';
             document.getElementById('pedal-container').style.display = 'flex';
@@ -473,7 +473,6 @@
             if (k === 'a') inputs.a = false; if (k === 'd') inputs.d = false;
         });
 
-        // Robust Pedal Handlers
         const setupPedal = (id, pedalKey) => {
             const el = document.getElementById(id);
             el.addEventListener('pointerdown', (e) => {
@@ -484,7 +483,6 @@
                 activePedalPointers.set(e.pointerId, pedalKey);
             });
             const release = (e) => {
-                e.preventDefault();
                 if (activePedalPointers.has(e.pointerId)) {
                     el.classList.remove('active');
                     activePedalPointers.delete(e.pointerId);
@@ -496,7 +494,6 @@
         setupPedal('pedal-accel', 'w');
         setupPedal('pedal-brake', 'space');
 
-        // Robust Steering Handler
         const wheelCont = document.getElementById('steering-container'), wheelEl = document.getElementById('ui-wheel');
         const getSteerAngleFromCoords = (clientX, clientY) => {
             const rect = wheelCont.getBoundingClientRect();
@@ -526,7 +523,6 @@
         window.addEventListener('pointerup', releaseSteer);
         window.addEventListener('pointercancel', releaseSteer);
 
-        // Global recovery for stuck inputs
         window.addEventListener('blur', () => {
             inputs.w = inputs.space = inputs.a = inputs.d = false;
             activePedalPointers.clear();
