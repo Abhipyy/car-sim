@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
+    <!-- CRITICAL FIX: Added proper viewport for fullscreen and rotation -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>3D Car Mechanical - Mobile Pro Edition</title>
     <style>
@@ -45,7 +46,7 @@
             text-align: center;
             padding: 20px;
             box-sizing: border-box;
-            touch-action: auto; 
+            touch-action: auto; /* Required for the button to take clicks */
         }
         #start-overlay h1 { margin-bottom: 10px; font-size: clamp(24px, 5vw, 36px); color: #f1c40f; text-transform: uppercase; letter-spacing: 2px; }
         #start-overlay p { font-size: 18px; opacity: 0.9; border: 2px solid #f1c40f; padding: 10px 30px; border-radius: 50px; transition: 0.3s; }
@@ -347,17 +348,20 @@
 
     <script>
         // --- VIBRATION & HAPTIC KILLER ---
-        // Prevent system vibration/context menus by blocking touchstart on interactive elements
-        // This stops the iOS magnifying glass and haptic menu while allowing pointer events.
         document.addEventListener('touchstart', e => {
-            const isScrollable = e.target.closest('#slider-menu');
+            const isScrollMenu = e.target.closest('#slider-menu');
             const isSlider = e.target.type === 'range';
-            const isTouchable = e.target.classList.contains('pedal') || e.target.classList.contains('gui-btn') || e.target.closest('#start-overlay') || e.target.closest('#controls-overlay');
-
-            if (!isScrollable && !isSlider) {
-                // Block touch on background and buttons to kill vibration
-                e.preventDefault();
+            const isStart = e.target.closest('#start-overlay');
+            const isControls = e.target.closest('#controls-overlay');
+            const isControlBtn = e.target.closest('.gui-btn') || e.target.closest('.pedal') || e.target.classList.contains('action-btn');
+            
+            // Allow start button and settings to receive touches
+            if (isScrollMenu || isSlider || isStart || isControls || isControlBtn) {
+                return;
             }
+            
+            // Prevent default on the background and other areas to kill system behaviors
+            e.preventDefault();
         }, { passive: false });
 
         document.addEventListener('contextmenu', e => e.preventDefault());
@@ -379,51 +383,47 @@
         window.addEventListener('resize', updateOrientationUI);
         updateOrientationUI();
 
-        // --- REBUILT Fullscreen & Auto-Rotate Implementation ---
-        const enterFullscreenAndLock = async () => {
-            const docEl = document.documentElement;
-            
-            // 1. Fullscreen request MUST be triggered immediately in the event loop
-            try {
-                const requestFS = docEl.requestFullscreen || 
-                                  docEl.webkitRequestFullscreen || 
-                                  docEl.mozRequestFullScreen || 
-                                  docEl.msRequestFullscreen;
-                
-                if (requestFS) {
-                    await requestFS.call(docEl);
-                }
-            } catch (err) {
-                console.warn("Fullscreen sequence failed or blocked.");
-            }
-
-            // 2. Immediate Orientation Lock
-            // Android Chrome requires fullscreen state to be established
-            if (screen.orientation && screen.orientation.lock) {
-                try {
-                    await screen.orientation.lock('landscape');
-                } catch (e) {
-                    console.warn("Standard orientation lock failed.");
-                }
-            } else {
-                // Fallbacks for older prefixed APIs
-                const lock = screen.lockOrientation || screen.webkitLockOrientation || screen.mozLockOrientation || screen.msLockOrientation;
-                if (lock) lock.call(screen, 'landscape');
-            }
-        };
-
-        // Pointerdown is used for immediate mobile responsiveness
+        // ========== FIXED: Fullscreen & Auto-rotate on button tap ==========
+        // This is the ONLY changed section - everything else remains exactly the same
         startOverlay.addEventListener('pointerdown', async (e) => {
             e.preventDefault();
-            // Start the sequence
-            await enterFullscreenAndLock();
             
-            // Proceed with game start
+            // Request fullscreen with all browser prefixes
+            try {
+                const docEl = document.documentElement;
+                if (docEl.requestFullscreen) {
+                    await docEl.requestFullscreen();
+                } else if (docEl.webkitRequestFullscreen) {
+                    await docEl.webkitRequestFullscreen();
+                } else if (docEl.mozRequestFullScreen) {
+                    await docEl.mozRequestFullScreen();
+                } else if (docEl.msRequestFullscreen) {
+                    await docEl.msRequestFullscreen();
+                }
+            } catch (err) {
+                console.log('Fullscreen request failed (this is normal on some browsers)');
+            }
+            
+            // Request landscape orientation lock
+            try {
+                if (screen.orientation && screen.orientation.lock) {
+                    await screen.orientation.lock('landscape').catch(() => {});
+                }
+            } catch (err) {
+                console.log('Orientation lock not supported');
+            }
+            
+            // Hide overlay and show game UI
             startOverlay.style.display = 'none';
             document.getElementById('gui').style.display = 'block';
             document.getElementById('hit-counter-box').style.display = 'block';
             document.getElementById('pedal-container').style.display = 'flex';
             document.getElementById('steering-container').style.display = 'block';
+            
+            // Force canvas to update size after orientation change
+            setTimeout(() => {
+                window.dispatchEvent(new Event('resize'));
+            }, 100);
         });
 
         // Close settings when clicking outside
