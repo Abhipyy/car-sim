@@ -347,9 +347,12 @@
 
     <script>
         // --- VIBRATION & HAPTIC KILLER ---
+        // Block browser defaults (magnifying glass, context menus, haptics)
         document.addEventListener('touchstart', e => {
             const isScrollMenu = e.target.closest('#slider-menu');
             const isSlider = e.target.type === 'range';
+            // We preventDefault on almost everything including buttons to kill vibration
+            // pointerdown/pointerup still fire correctly.
             if (!isScrollMenu && !isSlider) {
                 e.preventDefault();
             }
@@ -374,59 +377,50 @@
         window.addEventListener('resize', updateOrientationUI);
         updateOrientationUI();
 
-        // Optimized Fullscreen and Orientation Sequencer
-        const startSimulation = async () => {
-            const docEl = window.document.documentElement;
-            const requestFS = docEl.requestFullscreen || 
-                              docEl.webkitRequestFullscreen || 
-                              docEl.mozRequestFullScreen || 
-                              docEl.msRequestFullscreen;
+        // REBUILT: Robust Start Logic for Fullscreen and Rotation
+        const handleStartTap = async (e) => {
+            if (e) e.preventDefault();
             
-            // 1. First, immediate request for Fullscreen (User Activation required here)
-            let fsPromise = null;
-            if (requestFS) {
-                try { 
-                    fsPromise = requestFS.call(docEl);
-                } catch (err) {
-                    console.warn("Fullscreen initial call failed.");
-                }
+            const docEl = document.documentElement;
+            
+            // 1. Fullscreen Request (Must be the FIRST thing in the call stack)
+            try {
+                if (docEl.requestFullscreen) await docEl.requestFullscreen();
+                else if (docEl.webkitRequestFullscreen) await docEl.webkitRequestFullscreen();
+                else if (docEl.mozRequestFullScreen) await docEl.mozRequestFullScreen();
+                else if (docEl.msRequestFullscreen) await docEl.msRequestFullscreen();
+            } catch (err) {
+                console.warn("Fullscreen rejected by browser.");
             }
 
-            // 2. Hide overlay immediately for responsiveness
+            // 2. Immediate UI Transition
             startOverlay.style.display = 'none';
             document.getElementById('gui').style.display = 'block';
             document.getElementById('hit-counter-box').style.display = 'block';
             document.getElementById('pedal-container').style.display = 'flex';
             document.getElementById('steering-container').style.display = 'block';
 
-            // 3. Handle Fullscreen Promise and Orientation Lock
-            if (fsPromise instanceof Promise) {
-                await fsPromise.catch(() => console.warn("Fullscreen promise rejected."));
-            }
-
-            // 4. Lock Orientation (Awaiting transition completion)
-            const lockOrientation = screen.orientation?.lock || screen.webkitLockOrientation || screen.mozLockOrientation || screen.msLockOrientation;
-            if (lockOrientation) {
-                try {
-                    // Try standard first
-                    if (screen.orientation && screen.orientation.lock) {
-                        await screen.orientation.lock('landscape').catch(e => console.warn("Standard Lock fail:", e.message));
-                    } else {
-                        // Fallback for older prefixed versions
-                        lockOrientation.call(screen, 'landscape');
+            // 3. Orientation Lock (Sequential with a delay to allow FS transition)
+            setTimeout(async () => {
+                const lockOrientation = screen.orientation?.lock || screen.webkitLockOrientation || screen.mozLockOrientation || screen.msLockOrientation;
+                if (lockOrientation) {
+                    try {
+                        if (screen.orientation && screen.orientation.lock) {
+                            await screen.orientation.lock('landscape').catch(e => console.warn("Lock fail:", e.message));
+                        } else {
+                            lockOrientation.call(screen, 'landscape');
+                        }
+                    } catch (err) {
+                        console.warn("Orientation lock sequence failed.");
                     }
-                } catch (err) {
-                    console.warn("Forced rotation lock unavailable on this device/browser.");
                 }
-            }
+            }, 300); // 300ms is the "sweet spot" for mobile browser state transitions
         };
 
         // Pointerdown for the fastest mobile response trigger
-        startOverlay.addEventListener('pointerdown', (e) => {
-            e.preventDefault();
-            startSimulation();
-        });
+        startOverlay.addEventListener('pointerdown', handleStartTap);
 
+        // Close settings when clicking outside
         window.addEventListener('pointerdown', (e) => {
             const menu = document.getElementById('slider-menu');
             const gui = document.getElementById('gui');
