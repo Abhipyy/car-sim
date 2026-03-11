@@ -45,7 +45,7 @@
             text-align: center;
             padding: 20px;
             box-sizing: border-box;
-            touch-action: auto;
+            touch-action: auto; /* Required for the button to take clicks */
         }
         #start-overlay h1 { margin-bottom: 10px; font-size: clamp(24px, 5vw, 36px); color: #f1c40f; text-transform: uppercase; letter-spacing: 2px; }
         #start-overlay p { font-size: 18px; opacity: 0.9; border: 2px solid #f1c40f; padding: 10px 30px; border-radius: 50px; transition: 0.3s; }
@@ -350,9 +350,17 @@
         document.addEventListener('touchstart', e => {
             const isScrollMenu = e.target.closest('#slider-menu');
             const isSlider = e.target.type === 'range';
-            if (!isScrollMenu && !isSlider) {
-                e.preventDefault();
+            const isStart = e.target.closest('#start-overlay');
+            const isControls = e.target.closest('#controls-overlay');
+            const isControlBtn = e.target.closest('.gui-btn') || e.target.closest('.pedal') || e.target.classList.contains('action-btn');
+            
+            // Allow start button and settings to receive touches
+            if (isScrollMenu || isSlider || isStart || isControls || isControlBtn) {
+                return;
             }
+            
+            // Prevent default on the background and other areas to kill system behaviors
+            e.preventDefault();
         }, { passive: false });
 
         document.addEventListener('contextmenu', e => e.preventDefault());
@@ -374,37 +382,50 @@
         window.addEventListener('resize', updateOrientationUI);
         updateOrientationUI();
 
-        // REVERTED Logic for Fullscreen and Rotation lock
-        const enterFullscreenAndLock = async () => {
-            const docEl = window.document.documentElement;
-            const requestFS = docEl.requestFullscreen || docEl.webkitRequestFullscreen || docEl.mozRequestFullScreen || docEl.msRequestFullscreen;
+        // --- REBUILT Fullscreen & Auto-Rotate Logic ---
+        const executeStartSequence = async () => {
+            const docEl = document.documentElement;
             
-            if (requestFS) {
-                try { 
+            // 1. Trigger Fullscreen (Highest Priority User Activation)
+            try {
+                const requestFS = docEl.requestFullscreen || docEl.webkitRequestFullscreen || docEl.mozRequestFullScreen || docEl.msRequestFullscreen;
+                if (requestFS) {
                     await requestFS.call(docEl);
-                } catch (err) {
-                    console.log("Fullscreen request rejected.");
                 }
+            } catch (err) {
+                console.warn("Fullscreen request skipped or blocked.");
             }
 
-            if (screen.orientation && screen.orientation.lock) {
-                try {
-                    await screen.orientation.lock('landscape');
-                } catch (err) {
-                    console.log("Orientation lock failed.");
-                }
-            }
-        };
-
-        // Pointerdown for the fastest mobile response trigger
-        startOverlay.addEventListener('pointerdown', async (e) => {
-            e.preventDefault();
-            await enterFullscreenAndLock();
+            // 2. Immediate UI Transition
             startOverlay.style.display = 'none';
             document.getElementById('gui').style.display = 'block';
             document.getElementById('hit-counter-box').style.display = 'block';
             document.getElementById('pedal-container').style.display = 'flex';
             document.getElementById('steering-container').style.display = 'block';
+
+            // 3. Sequential Orientation Lock
+            // We wait 300ms for the fullscreen transition to stabilize before locking
+            setTimeout(async () => {
+                try {
+                    if (screen.orientation && screen.orientation.lock) {
+                        await screen.orientation.lock('landscape').catch(e => console.warn("Orientation lock error:", e.message));
+                    } else if (screen.lockOrientation) {
+                        screen.lockOrientation('landscape');
+                    } else if (screen.webkitLockOrientation) {
+                        screen.webkitLockOrientation('landscape');
+                    } else if (screen.mozLockOrientation) {
+                        screen.mozLockOrientation('landscape');
+                    }
+                } catch (err) {
+                    console.warn("Rotation lock unavailable.");
+                }
+            }, 300);
+        };
+
+        // Tap triggers the sequence
+        startOverlay.addEventListener('pointerdown', (e) => {
+            e.preventDefault();
+            executeStartSequence();
         });
 
         // Close settings when clicking outside
@@ -593,7 +614,6 @@
         const setupPedal = (id, pedalKey) => {
             const el = document.getElementById(id);
             el.addEventListener('pointerdown', (e) => {
-                e.preventDefault(); e.stopPropagation();
                 el.setPointerCapture(e.pointerId);
                 el.classList.add('active');
                 activePedalPointers.set(e.pointerId, pedalKey);
@@ -614,7 +634,6 @@
         };
 
         wheelCont.addEventListener('pointerdown', (e) => {
-            e.preventDefault(); e.stopPropagation();
             if (steerPointerId !== null) return;
             steerPointerId = e.pointerId;
             steerLastAngle = getSteerAngleFromCoords(e.clientX, e.clientY);
