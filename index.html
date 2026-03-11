@@ -45,8 +45,6 @@
             text-align: center;
             padding: 20px;
             box-sizing: border-box;
-            /* Allow touches specifically for this button */
-            touch-action: auto;
         }
         #start-overlay h1 { margin-bottom: 10px; font-size: clamp(24px, 5vw, 36px); color: #f1c40f; text-transform: uppercase; letter-spacing: 2px; }
         #start-overlay p { font-size: 18px; opacity: 0.9; border: 2px solid #f1c40f; padding: 10px 30px; border-radius: 50px; transition: 0.3s; }
@@ -66,7 +64,6 @@
             justify-content: center;
             z-index: 2000;
             cursor: pointer;
-            touch-action: auto;
         }
         .control-list {
             background: rgba(255,255,255,0.1);
@@ -150,7 +147,6 @@
             justify-content: center;
             cursor: pointer;
             font-size: 14px;
-            pointer-events: auto;
         }
         #btn-reset { background: #e74c3c; }
         #btn-auto { background: #34495e; }
@@ -173,7 +169,6 @@
             font-weight: bold;
             display: block;
             width: 100%;
-            pointer-events: auto;
         }
         #btn-controls { background: #8e44ad; } 
 
@@ -348,18 +343,14 @@
 
     <script>
         // --- VIBRATION & HAPTIC KILLER ---
-        // Refined touchstart logic to ensure interactive elements are not blocked
+        // We intercept touchstart globally. 
+        // We MUST use e.preventDefault() on a non-passive listener to stop iOS long-press vibration.
         document.addEventListener('touchstart', e => {
-            const isInteractive = 
-                e.target.type === 'range' || 
-                e.target.closest('#slider-menu') || 
-                e.target.closest('#start-overlay') ||
-                e.target.closest('#controls-overlay') ||
-                e.target.classList.contains('gui-btn') ||
-                e.target.classList.contains('pedal');
+            // Check if user is touching a slider or the scrollable settings menu
+            const isInput = e.target.type === 'range' || e.target.closest('#slider-menu');
             
-            // If it's NOT an intentional interactive element, prevent default to block zoom/haptics
-            if (!isInteractive) {
+            if (!isInput) {
+                // If not an input, prevent default to kill magnifying glass, haptics, and context menus
                 e.preventDefault();
             }
         }, { passive: false });
@@ -392,15 +383,11 @@
                     if (screen.orientation && screen.orientation.lock) {
                         await screen.orientation.lock('landscape').catch(() => {});
                     }
-                } catch (err) {
-                    console.log("Fullscreen request rejected or failed.");
-                }
+                } catch (err) {}
             }
         };
 
-        // Use pointerdown for immediate mobile response
-        startOverlay.addEventListener('pointerdown', async (e) => {
-            e.preventDefault();
+        startOverlay.addEventListener('click', async () => {
             await enterFullscreen();
             startOverlay.style.display = 'none';
             document.getElementById('gui').style.display = 'block';
@@ -580,11 +567,11 @@
             menu.style.display = open ? 'none' : 'block';
             stats.style.display = open ? 'block' : 'none';
         });
-        document.getElementById('btn-controls').addEventListener('pointerdown', (e) => {
+        document.getElementById('btn-controls').addEventListener('click', (e) => {
             e.stopPropagation();
             document.getElementById('controls-overlay').style.display = 'flex';
         });
-        document.getElementById('controls-overlay').addEventListener('pointerdown', () => {
+        document.getElementById('controls-overlay').addEventListener('click', () => {
             document.getElementById('controls-overlay').style.display = 'none';
         });
         document.getElementById('toggle-btn').addEventListener('pointerdown', (e) => {
@@ -595,16 +582,16 @@
         const setupPedal = (id, pedalKey) => {
             const el = document.getElementById(id);
             el.addEventListener('pointerdown', (e) => {
-                e.preventDefault(); e.stopPropagation();
-                el.setPointerCapture(e.pointerId);
+                e.setPointerCapture(e.pointerId);
                 el.classList.add('active');
                 activePedalPointers.set(e.pointerId, pedalKey);
             });
-            const release = (e) => {
+            el.addEventListener('pointerup', (e) => {
                 el.classList.remove('active'); activePedalPointers.delete(e.pointerId);
-            };
-            el.addEventListener('pointerup', release);
-            el.addEventListener('pointercancel', release);
+            });
+            el.addEventListener('pointercancel', (e) => {
+                el.classList.remove('active'); activePedalPointers.delete(e.pointerId);
+            });
         };
         setupPedal('pedal-accel', 'w');
         setupPedal('pedal-brake', 'space');
@@ -616,7 +603,6 @@
         };
 
         wheelCont.addEventListener('pointerdown', (e) => {
-            e.preventDefault(); e.stopPropagation();
             if (steerPointerId !== null) return;
             steerPointerId = e.pointerId;
             steerLastAngle = getSteerAngleFromCoords(e.clientX, e.clientY);
