@@ -2,9 +2,8 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <!-- FIX: viewport settings allow full screen and auto-rotate naturally -->
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-    <title>3D Car Mechanical - Mobile Pro</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>3D Car Mechanical - Mobile Pro Edition</title>
     <style>
         :root {
             --safe-top: env(safe-area-inset-top, 20px);
@@ -14,13 +13,13 @@
         }
 
         * {
+            /* Prevent all native selection, zooming, and context menus */
             -webkit-user-select: none;
             user-select: none;
             -webkit-tap-highlight-color: transparent;
             -webkit-touch-callout: none;
         }
 
-        /* FIX: body uses viewport units and locks orientation via CSS + JS, but allows rotation */
         body { 
             margin: 0; 
             overflow: hidden; 
@@ -28,17 +27,9 @@
             background: #000; 
             width: 100vw;
             height: 100dvh;
-            position: fixed; /* Prevents browser UI bounce on scroll */
-            touch-action: none; /* kills double-tap zoom, but preserves pointer events */
+            touch-action: none; /* Prevents browser level gestures */
         }
         
-        canvas { 
-            display: block; 
-            width: 100%; 
-            height: 100%; 
-            touch-action: none; /* no pinch/pan on canvas itself */
-        }
-
         /* Start Overlay */
         #start-overlay {
             position: fixed;
@@ -54,13 +45,13 @@
             text-align: center;
             padding: 20px;
             box-sizing: border-box;
-            touch-action: auto;
+            touch-action: auto; 
         }
         #start-overlay h1 { margin-bottom: 10px; font-size: clamp(24px, 5vw, 36px); color: #f1c40f; text-transform: uppercase; letter-spacing: 2px; }
         #start-overlay p { font-size: 18px; opacity: 0.9; border: 2px solid #f1c40f; padding: 10px 30px; border-radius: 50px; transition: 0.3s; }
         #orientation-msg { color: #e74c3c; margin-top: 20px; font-weight: bold; display: none; }
 
-        /* Controls Overlay */
+        /* Controls Help Overlay */
         #controls-overlay {
             position: fixed;
             top: 0; left: 0; width: 100%; height: 100dvh;
@@ -99,6 +90,7 @@
             font-family: monospace;
         }
 
+        /* Top Right Counter */
         #hit-counter-box {
             position: absolute;
             top: var(--safe-top);
@@ -281,6 +273,8 @@
             #steering-container { bottom: 10px; right: 10px; width: 135px; height: 135px; }
             #slider-menu { max-height: 140px; }
         }
+
+        canvas { display: block; width: 100%; height: 100dvh; }
     </style>
 </head>
 <body oncontextmenu="return false;">
@@ -352,13 +346,24 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 
     <script>
-        // --- HAPTIC / ZOOM PREVENTION (keep minimal, allow pointer events) ---
+        // --- VIBRATION & HAPTIC KILLER ---
         document.addEventListener('touchstart', e => {
-            // Only prevent default on canvas background, but let UI elements work
-            const target = e.target;
-            const isUI = target.closest('#gui') || target.closest('#pedal-container') || target.closest('#steering-container') || target.closest('#start-overlay') || target.closest('#controls-overlay');
-            if (!isUI && target.nodeName !== 'BUTTON' && target.nodeName !== 'INPUT') {
-                e.preventDefault(); // kill double-tap zoom on canvas, but UI remains functional
+            const isInteractive = 
+                e.target.type === 'range' || 
+                e.target.closest('#slider-menu') || 
+                e.target.closest('#start-overlay') ||
+                e.target.closest('#controls-overlay') ||
+                e.target.classList.contains('gui-btn') ||
+                e.target.classList.contains('pedal');
+            
+            const isScrollMenu = e.target.closest('#slider-menu');
+            const isSlider = e.target.type === 'range';
+
+            // If it's NOT an intentional interactive element, prevent default to block zoom/haptics
+            if (!isInteractive) {
+                if (!isScrollMenu && !isSlider) {
+                    e.preventDefault();
+                }
             }
         }, { passive: false });
 
@@ -381,45 +386,42 @@
         window.addEventListener('resize', updateOrientationUI);
         updateOrientationUI();
 
-        // --- FIX: Fullscreen & auto-rotate handled gracefully ---
-        const executeStartSequence = async () => {
-            const docEl = document.documentElement;
+        // RE-IMPLEMENTED: Fullscreen and Rotation lock strategy from working version
+        const enterFullscreenAndLock = async () => {
+            const docEl = window.document.documentElement;
+            const requestFS = docEl.requestFullscreen || docEl.webkitRequestFullscreen || docEl.mozRequestFullScreen || docEl.msRequestFullscreen;
             
-            // 1. Try fullscreen (some browsers may block without user gesture, but we have tap)
-            try {
-                const requestFS = docEl.requestFullscreen || docEl.webkitRequestFullscreen || docEl.mozRequestFullScreen || docEl.msRequestFullscreen;
-                if (requestFS) {
+            if (requestFS) {
+                try { 
                     await requestFS.call(docEl);
+                    if (screen.orientation && screen.orientation.lock) {
+                        await screen.orientation.lock('landscape').catch(() => {});
+                    }
+                } catch (err) {
+                    console.log("Fullscreen request rejected.");
                 }
-            } catch (err) {
-                console.warn("Fullscreen request skipped or blocked.");
             }
 
-            // 2. Hide overlay
+            if (screen.orientation && screen.orientation.lock) {
+                try {
+                    await screen.orientation.lock('landscape');
+                } catch (err) {
+                    console.log("Orientation lock failed.");
+                }
+            }
+        };
+
+        startOverlay.addEventListener('pointerdown', async (e) => {
+            e.preventDefault();
+            await enterFullscreenAndLock();
             startOverlay.style.display = 'none';
             document.getElementById('gui').style.display = 'block';
             document.getElementById('hit-counter-box').style.display = 'block';
             document.getElementById('pedal-container').style.display = 'flex';
             document.getElementById('steering-container').style.display = 'block';
-
-            // 3. Orientation lock (optional, will not break if unavailable) - but we do NOT want to force landscape if user rotates; we just hint.
-            //    Remove aggressive locking, just request if supported.
-            setTimeout(() => {
-                try {
-                    if (screen.orientation && screen.orientation.lock) {
-                        // Use 'natural' or 'landscape' as hint, but catch errors silently
-                        screen.orientation.lock('landscape').catch(() => {});
-                    }
-                } catch (err) {}
-            }, 100);
-        };
-
-        startOverlay.addEventListener('pointerdown', (e) => {
-            e.preventDefault();
-            executeStartSequence();
         });
 
-        // Close controls / menu when tapping outside
+        // Close settings when clicking outside
         window.addEventListener('pointerdown', (e) => {
             const menu = document.getElementById('slider-menu');
             const gui = document.getElementById('gui');
@@ -605,6 +607,7 @@
         const setupPedal = (id, pedalKey) => {
             const el = document.getElementById(id);
             el.addEventListener('pointerdown', (e) => {
+                e.preventDefault(); e.stopPropagation();
                 el.setPointerCapture(e.pointerId);
                 el.classList.add('active');
                 activePedalPointers.set(e.pointerId, pedalKey);
@@ -625,6 +628,7 @@
         };
 
         wheelCont.addEventListener('pointerdown', (e) => {
+            e.preventDefault(); e.stopPropagation();
             if (steerPointerId !== null) return;
             steerPointerId = e.pointerId;
             steerLastAngle = getSteerAngleFromCoords(e.clientX, e.clientY);
