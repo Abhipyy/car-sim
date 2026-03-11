@@ -13,7 +13,6 @@
         }
 
         * {
-            /* Prevent native selection and magnifying glasses */
             -webkit-user-select: none;
             user-select: none;
             -webkit-tap-highlight-color: transparent;
@@ -30,7 +29,6 @@
             touch-action: none;
         }
         
-        /* Start Overlay */
         #start-overlay {
             position: fixed;
             top: 0; left: 0; width: 100%; height: 100dvh;
@@ -51,7 +49,6 @@
         #start-overlay p { font-size: 18px; opacity: 0.9; border: 2px solid #f1c40f; padding: 10px 30px; border-radius: 50px; transition: 0.3s; }
         #orientation-msg { color: #e74c3c; margin-top: 20px; font-weight: bold; display: none; }
 
-        /* Controls Help Overlay */
         #controls-overlay {
             position: fixed;
             top: 0; left: 0; width: 100%; height: 100dvh;
@@ -90,7 +87,6 @@
             font-family: monospace;
         }
 
-        /* Top Right Counter */
         #hit-counter-box {
             position: absolute;
             top: var(--safe-top);
@@ -279,6 +275,49 @@
 </head>
 <body oncontextmenu="return false;">
 
+    <!-- PROTECTION SCRIPTS (INTERNAL) -->
+    <script>
+        /*
+        * CODE PROTECTION LAYER
+        * This script makes it difficult to open dev tools or view source.
+        */
+        
+        // 1. Block Context Menu (Right Click)
+        document.addEventListener('contextmenu', e => e.preventDefault());
+
+        // 2. Block Keyboard Shortcuts (F12, Ctrl+U, Ctrl+Shift+I, etc)
+        document.addEventListener('keydown', e => {
+            if (e.keyCode === 123 || // F12
+                (e.ctrlKey && e.shiftKey && e.keyCode === 73) || // Ctrl+Shift+I
+                (e.ctrlKey && e.shiftKey && e.keyCode === 74) || // Ctrl+Shift+J
+                (e.ctrlKey && e.shiftKey && e.keyCode === 67) || // Ctrl+Shift+C
+                (e.ctrlKey && e.keyCode === 85)) { // Ctrl+U
+                e.preventDefault();
+                return false;
+            }
+        });
+
+        // 3. Anti-DevTools Debugger Loop
+        // If they open DevTools manually, this will pause the browser repeatedly
+        (function() {
+            const block = function() {
+                setInterval(function() {
+                    (function() {
+                        return false;
+                    }
+                    ['constructor']('debugger')
+                    ['call']());
+                }, 50);
+            };
+            try { block(); } catch (err) {}
+        })();
+
+        // 4. Console Wiping
+        setInterval(() => {
+            console.clear();
+        }, 1000);
+    </script>
+
     <div id="start-overlay">
         <h1>CAR SIMULATOR</h1>
         <p id="start-btn-text">TAP TO START</p>
@@ -346,30 +385,22 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 
     <script>
-        // --- VIBRATION & HAPTIC KILLER ---
+        // --- MOBILE TOUCH HANDLING ---
         document.addEventListener('touchstart', e => {
             const isScrollMenu = e.target.closest('#slider-menu');
             const isSlider = e.target.type === 'range';
             const isStart = e.target.closest('#start-overlay');
             const isControls = e.target.closest('#controls-overlay');
             
-            // Allow the start button and help overlay to take touches normally
             if (isStart || isControls) return;
 
-            // Block touch on other interactive elements (pedals, dashboard) 
-            // to stop magnifying glasses/haptics, but pointer events will still work.
             if (!isScrollMenu && !isSlider) {
                 e.preventDefault();
             }
         }, { passive: false });
 
-        document.addEventListener('contextmenu', e => e.preventDefault());
-
         // --- State ---
-        let rockHits = 0;
-        let autoLock = false;
-        let currentlyStuckRock = null;
-        let collisionCooldown = false;
+        let rockHits = 0, autoLock = false, currentlyStuckRock = null, collisionCooldown = false;
 
         // --- Initialization ---
         const startOverlay = document.getElementById('start-overlay');
@@ -382,23 +413,21 @@
         window.addEventListener('resize', updateOrientationUI);
         updateOrientationUI();
 
-        // RE-IMPLEMENTED: Working Fullscreen & Rotation Logic
-        const enterFullscreen = async () => {
+        const enterFullscreenAndLock = async () => {
             const docEl = window.document.documentElement;
             const requestFS = docEl.requestFullscreen || docEl.webkitRequestFullscreen || docEl.mozRequestFullScreen || docEl.msRequestFullscreen;
+            
             if (requestFS) {
-                try { 
-                    await requestFS.call(docEl);
-                    if (screen.orientation && screen.orientation.lock) {
-                        await screen.orientation.lock('landscape').catch(() => {});
-                    }
-                } catch (err) {}
+                try { await requestFS.call(docEl); } catch (err) {}
+            }
+
+            if (screen.orientation && screen.orientation.lock) {
+                try { await screen.orientation.lock('landscape'); } catch (err) {}
             }
         };
 
-        // Click handles both Fullscreen and Orientation lock most reliably
         startOverlay.addEventListener('click', async () => {
-            await enterFullscreen();
+            await enterFullscreenAndLock();
             startOverlay.style.display = 'none';
             document.getElementById('gui').style.display = 'block';
             document.getElementById('hit-counter-box').style.display = 'block';
@@ -406,7 +435,6 @@
             document.getElementById('steering-container').style.display = 'block';
         });
 
-        // Close settings when clicking outside
         window.addEventListener('pointerdown', (e) => {
             const menu = document.getElementById('slider-menu');
             const gui = document.getElementById('gui');
@@ -416,24 +444,12 @@
             }
         });
 
-        // --- Config ---
+        // --- Sim Config ---
         const CONFIG = {
-            acceleration: 1.2,
-            brakingPower: 1.8,     
-            friction: 0.03,        
-            maxSpeed: 30,          
-            maxReverseSpeed: -15,
-            maxSteer: 80 * (Math.PI / 180), 
-            steerSensitivity: 0.4, 
-            rockDensity: 15,
-            fov: 65,
-            roadWidth: 18,          
-            gridSpacing: 120, 
-            gridSize: 3,
-            borderHeight: 4.5,     
-            borderWidth: 1.5,       
-            roadClamping: 7.4,
-            carRadius: 2.2 
+            acceleration: 1.2, brakingPower: 1.8, friction: 0.03, maxSpeed: 30,          
+            maxReverseSpeed: -15, maxSteer: 80 * (Math.PI / 180), steerSensitivity: 0.4, 
+            rockDensity: 15, fov: 65, roadWidth: 18, gridSpacing: 120, gridSize: 3,
+            borderHeight: 4.5, borderWidth: 1.5, roadClamping: 7.4, carRadius: 2.2 
         };
 
         // --- Three.js Setup ---
@@ -539,10 +555,9 @@
         const spoke2 = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.35, 0.03), matMech); spoke2.position.y = -0.17; steerWheelGroup.add(spoke2);
         steerWheelGroup.position.set(driverX, 1.65, 0.8); steerWheelGroup.rotation.x = Math.PI / 4; car.add(steerWheelGroup);
 
-        // --- Controls Logic ---
+        // --- Control Hooks ---
         const inputs = { w: false, space: false, a: false, d: false };
-        let speed = 0, steerAngle = 0, steerPointerId = null, steerLastAngle = 0;
-        let activePedalPointers = new Map();
+        let speed = 0, steerAngle = 0, steerPointerId = null, steerLastAngle = 0, activePedalPointers = new Map();
 
         window.addEventListener('keydown', (e) => { 
             const k = e.key.toLowerCase(); if (k === 'w') inputs.w = true; if (k === ' ') inputs.space = true;
@@ -556,69 +571,53 @@
         });
 
         document.getElementById('btn-auto').addEventListener('pointerdown', (e) => {
-            e.stopPropagation();
-            autoLock = !autoLock;
+            e.stopPropagation(); autoLock = !autoLock;
             const btn = document.getElementById('btn-auto');
             autoLock ? btn.classList.add('active') : btn.classList.remove('active');
         });
         document.getElementById('btn-clear').addEventListener('pointerdown', (e) => {
-            e.stopPropagation();
-            clearStuckRock();
+            e.stopPropagation(); clearStuckRock();
         });
         document.getElementById('btn-reset').addEventListener('pointerdown', (e) => {
-            e.stopPropagation();
-            redoPosition();
+            e.stopPropagation(); redoPosition();
         });
         document.getElementById('btn-menu').addEventListener('pointerdown', (e) => {
             e.stopPropagation();
-            const menu = document.getElementById('slider-menu');
-            const stats = document.getElementById('stats-display');
+            const menu = document.getElementById('slider-menu'), stats = document.getElementById('stats-display');
             const open = menu.style.display === 'block';
-            menu.style.display = open ? 'none' : 'block';
-            stats.style.display = open ? 'block' : 'none';
+            menu.style.display = open ? 'none' : 'block'; stats.style.display = open ? 'block' : 'none';
         });
         document.getElementById('btn-controls').addEventListener('click', (e) => {
-            e.stopPropagation();
-            document.getElementById('controls-overlay').style.display = 'flex';
+            e.stopPropagation(); document.getElementById('controls-overlay').style.display = 'flex';
         });
         document.getElementById('controls-overlay').addEventListener('click', () => {
             document.getElementById('controls-overlay').style.display = 'none';
         });
         document.getElementById('toggle-btn').addEventListener('pointerdown', (e) => {
-            e.stopPropagation();
-            toggleObstacles();
+            e.stopPropagation(); toggleObstacles();
         });
 
         const setupPedal = (id, pedalKey) => {
             const el = document.getElementById(id);
             el.addEventListener('pointerdown', (e) => {
-                // Ensure Capture is on the element
-                el.setPointerCapture(e.pointerId);
-                el.classList.add('active');
+                el.setPointerCapture(e.pointerId); el.classList.add('active');
                 activePedalPointers.set(e.pointerId, pedalKey);
             });
-            const release = (e) => {
-                el.classList.remove('active'); activePedalPointers.delete(e.pointerId);
-            };
-            el.addEventListener('pointerup', release);
-            el.addEventListener('pointercancel', release);
+            const release = (e) => { el.classList.remove('active'); activePedalPointers.delete(e.pointerId); };
+            el.addEventListener('pointerup', release); el.addEventListener('pointercancel', release);
         };
-        setupPedal('pedal-accel', 'w');
-        setupPedal('pedal-brake', 'space');
+        setupPedal('pedal-accel', 'w'); setupPedal('pedal-brake', 'space');
 
         const wheelCont = document.getElementById('steering-container'), wheelEl = document.getElementById('ui-wheel');
         const getSteerAngleFromCoords = (clientX, clientY) => {
             const rect = wheelCont.getBoundingClientRect();
             return Math.atan2(clientY - (rect.top + rect.height/2), clientX - (rect.left + rect.width/2));
         };
-
         wheelCont.addEventListener('pointerdown', (e) => {
             if (steerPointerId !== null) return;
-            steerPointerId = e.pointerId;
-            steerLastAngle = getSteerAngleFromCoords(e.clientX, e.clientY);
+            steerPointerId = e.pointerId; steerLastAngle = getSteerAngleFromCoords(e.clientX, e.clientY);
             wheelCont.setPointerCapture(e.pointerId);
         });
-
         window.addEventListener('pointermove', (e) => {
             if (e.pointerId !== steerPointerId) return;
             const currentAngle = getSteerAngleFromCoords(e.clientX, e.clientY);
@@ -628,10 +627,8 @@
             steerAngle = Math.max(-CONFIG.maxSteer, Math.min(CONFIG.maxSteer, steerAngle));
             steerLastAngle = currentAngle;
         });
-
         const releaseSteer = (e) => { if (e.pointerId === steerPointerId) steerPointerId = null; };
-        window.addEventListener('pointerup', releaseSteer);
-        window.addEventListener('pointercancel', releaseSteer);
+        window.addEventListener('pointerup', releaseSteer); window.addEventListener('pointercancel', releaseSteer);
 
         function redoPosition() {
             car.position.set(0, 0, 0); car.rotation.y = 0; speed = 0; steerAngle = 0;
@@ -641,10 +638,8 @@
         function clearStuckRock() {
             if (currentlyStuckRock) {
                 worldGroup.remove(currentlyStuckRock);
-                const idx = rocks.indexOf(currentlyStuckRock);
-                if (idx > -1) rocks.splice(idx, 1);
-                currentlyStuckRock = null;
-                updateStatus("ROCK CLEARED", "#3498db");
+                const idx = rocks.indexOf(currentlyStuckRock); if (idx > -1) rocks.splice(idx, 1);
+                currentlyStuckRock = null; updateStatus("ROCK CLEARED", "#3498db");
             }
         }
         function toggleObstacles() {
@@ -652,8 +647,7 @@
             updateStatus(obstaclesEnabled ? "OBSTACLES ON" : "CLEAR", "#f39c12");
         }
         function updateStatus(txt, col) {
-            const s = document.getElementById('status');
-            s.innerText = txt; s.style.color = col;
+            const s = document.getElementById('status'); s.innerText = txt; s.style.color = col;
         }
 
         document.getElementById('limit-slider').addEventListener('input', (e) => { 
@@ -677,11 +671,8 @@
             const isAccel = isAccelManual || (autoLock && !isBrake);
 
             if (isBrake) {
-                if (speed > 0.5) speed -= CONFIG.brakingPower;
-                else speed -= CONFIG.acceleration * 0.8;
-            } else if (isAccel) {
-                speed += CONFIG.acceleration;
-            }
+                if (speed > 0.5) speed -= CONFIG.brakingPower; else speed -= CONFIG.acceleration * 0.8;
+            } else if (isAccel) { speed += CONFIG.acceleration; }
 
             speed *= (1 - CONFIG.friction);
             speed = Math.min(Math.max(speed, CONFIG.maxReverseSpeed), CONFIG.maxSpeed);
@@ -707,25 +698,17 @@
             let hitRock = false;
             if (obstaclesEnabled) {
                 rocks.forEach(rock => {
-                    const dx = nextX - rock.position.x;
-                    const dz = nextZ - rock.position.z;
-                    const dist = Math.sqrt(dx*dx + dz*dz);
-                    if (dist < 1.3 + rock.userData.radius) {
-                        hitRock = true;
-                        currentlyStuckRock = rock;
-                    }
+                    const dx = nextX - rock.position.x, dz = nextZ - rock.position.z, dist = Math.sqrt(dx*dx + dz*dz);
+                    if (dist < 1.3 + rock.userData.radius) { hitRock = true; currentlyStuckRock = rock; }
                 });
             }
 
             if (hitRock) {
                 if (!collisionCooldown) {
-                    rockHits++;
-                    document.getElementById('rock-hit-count').innerText = rockHits;
-                    collisionCooldown = true;
-                    setTimeout(() => { collisionCooldown = false; }, 800);
+                    rockHits++; document.getElementById('rock-hit-count').innerText = rockHits;
+                    collisionCooldown = true; setTimeout(() => { collisionCooldown = false; }, 800);
                 }
-                speed *= -0.4;
-                updateStatus("ROCK HIT!", "#e74c3c");
+                speed *= -0.4; updateStatus("ROCK HIT!", "#e74c3c");
             } else {
                 car.position.x = nextX; car.position.z = nextZ;
                 if (document.getElementById('status').innerText === "ROCK HIT!") updateStatus("OK", "#2ecc71");
@@ -735,21 +718,15 @@
             const roll = v / 0.55;
             fl.mesh.rotation.x += roll; fr.mesh.rotation.x += roll; rl.mesh.rotation.x += roll; rr.mesh.rotation.x += roll;
             steerWheelGroup.rotation.z = -steerAngle * 3.0; wheelEl.style.transform = `rotate(${-steerAngle * (180/Math.PI)}deg)`;
-
             const camPos = new THREE.Vector3(driverX, 1.85, -0.9).applyQuaternion(car.quaternion);
             camera.position.copy(car.position).add(camPos);
             camera.lookAt(car.position.clone().add(new THREE.Vector3(driverX, 0.45, 25).applyQuaternion(car.quaternion)));
-
             document.getElementById('speed-val').innerText = Math.round(Math.abs(speed));
             document.getElementById('steer-val').innerText = Math.round(steerAngle * (180/Math.PI));
         }
 
         function animate() { requestAnimationFrame(animate); update(); renderer.render(scene, camera); }
-        window.addEventListener('resize', () => { 
-            camera.aspect = window.innerWidth/window.innerHeight; 
-            camera.updateProjectionMatrix(); 
-            renderer.setSize(window.innerWidth, window.innerHeight); 
-        });
+        window.addEventListener('resize', () => { camera.aspect = window.innerWidth/window.innerHeight; camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth, window.innerHeight); });
         animate();
     </script>
 </body>
