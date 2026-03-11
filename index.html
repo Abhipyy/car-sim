@@ -188,6 +188,24 @@
             pointer-events: none;
         }
 
+        /* Mobile Adjustments */
+        @media (max-width: 768px) {
+            #gui { top: 10px; left: 10px; width: 150px; padding: 8px; }
+            #slider-menu { max-height: 140px; }
+            .stat { font-size: 10px; }
+            .action-btn { font-size: 9px; padding: 6px 8px; }
+            #reset-btn { top: 30px; width: 28px; height: 28px; font-size: 16px; }
+            #menu-btn { font-size: 20px; top: 2px; }
+            
+            /* Reduced margin to 10px to match Settings Block */
+            #pedal-container { bottom: 10px; left: 10px; gap: 10px; }
+            /* Reduced pedal sizes */
+            .pedal { width: 50px; height: 85px; font-size: 11px; border-width: 2px; }
+            #pedal-brake { height: 65px; width: 80px; }
+            
+            #steering-container { bottom: 10px; right: 10px; width: 125px; height: 125px; }
+        }
+
         @media (min-width: 769px) {
             #gui { width: 220px; }
             #pedal-container { bottom: 40px; left: 40px; }
