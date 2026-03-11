@@ -261,31 +261,30 @@
         window.addEventListener('orientationchange', updateOrientationUI);
         updateOrientationUI();
 
-        const enterFullscreen = () => {
+        const enterFullscreen = async () => {
             const docEl = window.document.documentElement;
-            // Support multiple browsers
             const requestFS = docEl.requestFullscreen || 
+                              docEl.webkitRequestFullscreen || 
                               docEl.mozRequestFullScreen || 
-                              docEl.webkitRequestFullScreen || 
                               docEl.msRequestFullscreen;
             
             if (requestFS) {
                 try {
-                    const fsPromise = requestFS.call(docEl);
-                    if (fsPromise instanceof Promise) {
-                        fsPromise.catch(err => {
-                            console.warn("Fullscreen request was rejected: ", err.message);
-                        });
+                    await requestFS.call(docEl);
+                    // Attempt to lock orientation on Android
+                    if (screen.orientation && screen.orientation.lock) {
+                        await screen.orientation.lock('landscape').catch(() => {});
                     }
                 } catch (err) {
-                    console.warn("Fullscreen call failed: ", err.message);
+                    console.warn("Fullscreen request failed: ", err.message);
                 }
             }
         };
 
-        startOverlay.addEventListener('pointerdown', (e) => {
+        // Using pointerup often works better for "user gestures" on some mobile browsers
+        startOverlay.addEventListener('pointerup', async (e) => {
             e.preventDefault();
-            enterFullscreen();
+            await enterFullscreen();
             startOverlay.style.display = 'none';
             document.getElementById('gui').style.display = 'block';
             document.getElementById('pedal-container').style.display = 'flex';
