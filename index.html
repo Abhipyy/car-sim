@@ -347,13 +347,9 @@
 
     <script>
         // --- VIBRATION & HAPTIC KILLER ---
-        // Prevent all vibration-triggering long presses
         document.addEventListener('touchstart', e => {
             const isScrollMenu = e.target.closest('#slider-menu');
             const isSlider = e.target.type === 'range';
-            
-            // To kill vibration on touchables, we MUST call preventDefault on touchstart
-            // We only spare elements that actually need touchstart for native behavior
             if (!isScrollMenu && !isSlider) {
                 e.preventDefault();
             }
@@ -378,47 +374,59 @@
         window.addEventListener('resize', updateOrientationUI);
         updateOrientationUI();
 
-        const enterFullscreenAndLock = async () => {
+        // Optimized Fullscreen and Orientation Sequencer
+        const startSimulation = async () => {
             const docEl = window.document.documentElement;
-            // Robust check for various fullscreen methods
             const requestFS = docEl.requestFullscreen || 
                               docEl.webkitRequestFullscreen || 
                               docEl.mozRequestFullScreen || 
                               docEl.msRequestFullscreen;
             
+            // 1. First, immediate request for Fullscreen (User Activation required here)
+            let fsPromise = null;
             if (requestFS) {
                 try { 
-                    // Attempt fullscreen
-                    const fsPromise = requestFS.call(docEl);
-                    
-                    // Attempt orientation lock immediately (some browsers require this sequence)
-                    if (screen.orientation && screen.orientation.lock) {
-                        await screen.orientation.lock('landscape').catch(() => {
-                            console.log("Orientation lock failed - may require fullscreen transition to finish.");
-                        });
-                    }
-
-                    if (fsPromise instanceof Promise) {
-                        await fsPromise;
-                    }
+                    fsPromise = requestFS.call(docEl);
                 } catch (err) {
-                    console.log("Fullscreen request rejected or failed.");
+                    console.warn("Fullscreen initial call failed.");
                 }
             }
-        };
 
-        // Use pointerdown for immediate mobile response
-        startOverlay.addEventListener('pointerdown', async (e) => {
-            e.preventDefault();
-            await enterFullscreenAndLock();
+            // 2. Hide overlay immediately for responsiveness
             startOverlay.style.display = 'none';
             document.getElementById('gui').style.display = 'block';
             document.getElementById('hit-counter-box').style.display = 'block';
             document.getElementById('pedal-container').style.display = 'flex';
             document.getElementById('steering-container').style.display = 'block';
+
+            // 3. Handle Fullscreen Promise and Orientation Lock
+            if (fsPromise instanceof Promise) {
+                await fsPromise.catch(() => console.warn("Fullscreen promise rejected."));
+            }
+
+            // 4. Lock Orientation (Awaiting transition completion)
+            const lockOrientation = screen.orientation?.lock || screen.webkitLockOrientation || screen.mozLockOrientation || screen.msLockOrientation;
+            if (lockOrientation) {
+                try {
+                    // Try standard first
+                    if (screen.orientation && screen.orientation.lock) {
+                        await screen.orientation.lock('landscape').catch(e => console.warn("Standard Lock fail:", e.message));
+                    } else {
+                        // Fallback for older prefixed versions
+                        lockOrientation.call(screen, 'landscape');
+                    }
+                } catch (err) {
+                    console.warn("Forced rotation lock unavailable on this device/browser.");
+                }
+            }
+        };
+
+        // Pointerdown for the fastest mobile response trigger
+        startOverlay.addEventListener('pointerdown', (e) => {
+            e.preventDefault();
+            startSimulation();
         });
 
-        // Close settings when clicking outside
         window.addEventListener('pointerdown', (e) => {
             const menu = document.getElementById('slider-menu');
             const gui = document.getElementById('gui');
