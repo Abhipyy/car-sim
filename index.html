@@ -45,7 +45,8 @@
             text-align: center;
             padding: 20px;
             box-sizing: border-box;
-            touch-action: auto; 
+            /* Allow touches specifically for this button */
+            touch-action: auto;
         }
         #start-overlay h1 { margin-bottom: 10px; font-size: clamp(24px, 5vw, 36px); color: #f1c40f; text-transform: uppercase; letter-spacing: 2px; }
         #start-overlay p { font-size: 18px; opacity: 0.9; border: 2px solid #f1c40f; padding: 10px 30px; border-radius: 50px; transition: 0.3s; }
@@ -347,19 +348,18 @@
 
     <script>
         // --- VIBRATION & HAPTIC KILLER ---
-        // We refined this to specifically ALLOW touch on the start overlay.
-        // If we block it here, the subsequent 'pointerdown' or 'click' won't be considered a "User Activation."
+        // Refined touchstart logic to ensure interactive elements are not blocked
         document.addEventListener('touchstart', e => {
-            const isScrollMenu = e.target.closest('#slider-menu');
-            const isSlider = e.target.type === 'range';
-            const isStart = e.target.closest('#start-overlay');
+            const isInteractive = 
+                e.target.type === 'range' || 
+                e.target.closest('#slider-menu') || 
+                e.target.closest('#start-overlay') ||
+                e.target.closest('#controls-overlay') ||
+                e.target.classList.contains('gui-btn') ||
+                e.target.classList.contains('pedal');
             
-            // Allow the start overlay to process touches naturally so FS/Orientation works
-            if (isStart) return;
-
-            // For pedals and GUI buttons, we block touchstart to kill vibration, 
-            // but the Pointer Events API will still handle the interaction logic.
-            if (!isScrollMenu && !isSlider) {
+            // If it's NOT an intentional interactive element, prevent default to block zoom/haptics
+            if (!isInteractive) {
                 e.preventDefault();
             }
         }, { passive: false });
@@ -383,53 +383,30 @@
         window.addEventListener('resize', updateOrientationUI);
         updateOrientationUI();
 
-        // --- REBUILT Fullscreen & Orientation Lock Logic ---
-        const startSimulation = async () => {
-            const docEl = document.documentElement;
-            
-            // 1. Fullscreen request MUST be the very first line triggered by user gesture
-            const requestFS = docEl.requestFullscreen || 
-                              docEl.webkitRequestFullscreen || 
-                              docEl.mozRequestFullScreen || 
-                              docEl.msRequestFullscreen;
-            
+        const enterFullscreen = async () => {
+            const docEl = window.document.documentElement;
+            const requestFS = docEl.requestFullscreen || docEl.webkitRequestFullscreen || docEl.mozRequestFullScreen || docEl.msRequestFullscreen;
             if (requestFS) {
                 try { 
-                    // Attempt fullscreen immediately
                     await requestFS.call(docEl);
+                    if (screen.orientation && screen.orientation.lock) {
+                        await screen.orientation.lock('landscape').catch(() => {});
+                    }
                 } catch (err) {
-                    console.warn("Fullscreen request rejected or blocked.");
+                    console.log("Fullscreen request rejected or failed.");
                 }
             }
+        };
 
-            // 2. Hide overlay and show game UI
+        // Use pointerdown for immediate mobile response
+        startOverlay.addEventListener('pointerdown', async (e) => {
+            e.preventDefault();
+            await enterFullscreen();
             startOverlay.style.display = 'none';
             document.getElementById('gui').style.display = 'block';
             document.getElementById('hit-counter-box').style.display = 'block';
             document.getElementById('pedal-container').style.display = 'flex';
             document.getElementById('steering-container').style.display = 'block';
-
-            // 3. Forced Orientation Lock
-            // We wait a tiny bit (250ms) for the FS transition to establish a "context" for locking
-            setTimeout(async () => {
-                try {
-                    if (screen.orientation && screen.orientation.lock) {
-                        await screen.orientation.lock('landscape').catch(e => console.warn("Orientation lock error:", e.message));
-                    } else {
-                        // Prefixed fallbacks
-                        const lock = screen.lockOrientation || screen.webkitLockOrientation || screen.mozLockOrientation || screen.msLockOrientation;
-                        if (lock) lock.call(screen, 'landscape');
-                    }
-                } catch (err) {
-                    console.warn("Rotation lock sequence failed.");
-                }
-            }, 250);
-        };
-
-        // Pointerdown is used for the fastest mobile response trigger
-        startOverlay.addEventListener('pointerdown', (e) => {
-            e.preventDefault();
-            startSimulation();
         });
 
         // Close settings when clicking outside
@@ -618,6 +595,7 @@
         const setupPedal = (id, pedalKey) => {
             const el = document.getElementById(id);
             el.addEventListener('pointerdown', (e) => {
+                e.preventDefault(); e.stopPropagation();
                 el.setPointerCapture(e.pointerId);
                 el.classList.add('active');
                 activePedalPointers.set(e.pointerId, pedalKey);
@@ -638,6 +616,7 @@
         };
 
         wheelCont.addEventListener('pointerdown', (e) => {
+            e.preventDefault(); e.stopPropagation();
             if (steerPointerId !== null) return;
             steerPointerId = e.pointerId;
             steerLastAngle = getSteerAngleFromCoords(e.clientX, e.clientY);
