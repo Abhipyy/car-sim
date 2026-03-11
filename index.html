@@ -129,7 +129,7 @@
             max-height: 180px;
             overflow-y: auto;
             padding-right: 8px;
-            /* Allow vertical scrolling by swiping on mobile */
+            /* CRITICAL: Allow vertical scrolling anywhere in the box */
             touch-action: pan-y !important; 
         }
         
@@ -191,46 +191,45 @@
             pointer-events: none;
         }
 
-        /* --- UPDATED MOBILE ADJUSTMENTS --- */
+        /* --- MOBILE ADJUSTMENTS --- */
         @media (max-width: 950px), (max-height: 500px) {
             #gui { 
                 top: 15px; 
                 left: 15px; 
-                width: 170px; 
+                width: 180px; 
                 padding: 10px; 
             }
-            #slider-menu { max-height: 150px; }
+            #slider-menu { max-height: 160px; }
             .stat { font-size: 11px; }
-            .action-btn { font-size: 10px; padding: 7px 10px; }
-            #reset-btn { top: 35px; width: 30px; height: 30px; font-size: 18px; }
+            .action-btn { font-size: 10px; padding: 8px 12px; }
+            #reset-btn { top: 38px; width: 32px; height: 32px; font-size: 18px; }
+            #menu-btn { font-size: 22px; }
             
             #pedal-container { 
                 bottom: 15px; 
                 left: 15px; 
                 gap: 12px; 
             }
-            /* Moderately sized pedals for easier mobile control */
             .pedal { 
-                width: 65px; 
-                height: 110px; 
+                width: 60px; 
+                height: 100px; 
                 font-size: 12px; 
                 border-width: 2px; 
             }
-            #pedal-brake { height: 85px; width: 100px; }
+            #pedal-brake { height: 80px; width: 90px; }
             
-            /* Moderately sized steering for mobile landscape */
             #steering-container { 
                 bottom: 15px; 
                 right: 15px; 
-                width: 140px; 
-                height: 140px; 
+                width: 130px; 
+                height: 130px; 
             }
         }
 
         canvas { display: block; width: 100%; height: 100dvh; }
     </style>
 </head>
-<body oncontextmenu="return false;">
+<body oncontextmenu="return false;" onselectstart="return false;">
 
     <div id="start-overlay">
         <h1>CAR SIMULATOR</h1>
@@ -278,12 +277,9 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 
     <script>
-        // Block long-press menu globally for mobile
-        window.oncontextmenu = function(event) {
-            event.preventDefault();
-            event.stopPropagation();
-            return false;
-        };
+        // Force context menu disable and text selection disable for iOS stability
+        document.addEventListener('contextmenu', e => e.preventDefault());
+        document.addEventListener('selectstart', e => e.preventDefault());
 
         // --- Initialization & UI Helpers ---
         const startOverlay = document.getElementById('start-overlay');
@@ -318,7 +314,6 @@
             }
         };
 
-        // Click event is generally the most robust "user gesture" for Fullscreen API
         startOverlay.addEventListener('click', async () => {
             await enterFullscreen();
             startOverlay.style.display = 'none';
@@ -475,6 +470,7 @@
 
         const setupPedal = (id, pedalKey) => {
             const el = document.getElementById(id);
+            // pointerdown + preventDefault + setPointerCapture is key for iPhone
             el.addEventListener('pointerdown', (e) => {
                 e.preventDefault();
                 e.stopPropagation();
@@ -490,6 +486,8 @@
             };
             el.addEventListener('pointerup', release);
             el.addEventListener('pointercancel', release);
+            // Strict touch-start handling for iOS vibration blocking
+            el.addEventListener('touchstart', (e) => e.preventDefault(), {passive: false});
         };
         setupPedal('pedal-accel', 'w');
         setupPedal('pedal-brake', 'space');
@@ -508,6 +506,7 @@
             steerLastAngle = getSteerAngleFromCoords(e.clientX, e.clientY);
             wheelCont.setPointerCapture(e.pointerId);
         });
+        wheelCont.addEventListener('touchstart', (e) => e.preventDefault(), {passive: false});
 
         window.addEventListener('pointermove', (e) => {
             if (e.pointerId !== steerPointerId) return;
