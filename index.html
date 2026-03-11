@@ -26,6 +26,8 @@
             overflow: hidden; 
             font-family: 'Segoe UI', system-ui, sans-serif; 
             background: #000; 
+            width: 100vw;
+            height: 100dvh;
         }
         
         /* Start Overlay */
@@ -216,6 +218,7 @@
         </div>
         
         <div id="slider-menu">
+            <div id="slider-menu-title">SETTINGS</div>
             <div class="slider-group">
                 <span class="slider-label">SPEED LIMITER: <span id="limit-val">30</span></span>
                 <input type="range" id="limit-slider" min="10" max="60" step="5" value="30">
@@ -260,12 +263,23 @@
 
         const enterFullscreen = () => {
             const docEl = window.document.documentElement;
-            const requestFS = docEl.requestFullscreen || docEl.mozRequestFullScreen || docEl.webkitRequestFullScreen || docEl.msRequestFullscreen;
+            // Support multiple browsers
+            const requestFS = docEl.requestFullscreen || 
+                              docEl.mozRequestFullScreen || 
+                              docEl.webkitRequestFullScreen || 
+                              docEl.msRequestFullscreen;
+            
             if (requestFS) {
                 try {
-                    const p = requestFS.call(docEl);
-                    if (p) p.catch(() => console.log("FS Blocked"));
-                } catch (e) {}
+                    const fsPromise = requestFS.call(docEl);
+                    if (fsPromise instanceof Promise) {
+                        fsPromise.catch(err => {
+                            console.warn("Fullscreen request was rejected: ", err.message);
+                        });
+                    }
+                } catch (err) {
+                    console.warn("Fullscreen call failed: ", err.message);
+                }
             }
         };
 
