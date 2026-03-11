@@ -347,14 +347,13 @@
 
     <script>
         // --- VIBRATION & HAPTIC KILLER ---
-        // Block browser defaults (magnifying glass, context menus, haptics)
+        // Prevent all vibration-triggering long presses
         document.addEventListener('touchstart', e => {
             const isScrollMenu = e.target.closest('#slider-menu');
             const isSlider = e.target.type === 'range';
-            const isStart = e.target.closest('#start-overlay');
-            const isControls = e.target.closest('#controls-overlay');
             
-            // Blocking touchstart for pedals and buttons kills the iOS haptic vibration.
+            // To kill vibration on touchables, we MUST call preventDefault on touchstart
+            // We only spare elements that actually need touchstart for native behavior
             if (!isScrollMenu && !isSlider) {
                 e.preventDefault();
             }
@@ -381,28 +380,34 @@
 
         const enterFullscreenAndLock = async () => {
             const docEl = window.document.documentElement;
-            // Native Fullscreen Request
-            const requestFS = docEl.requestFullscreen || docEl.webkitRequestFullscreen || docEl.mozRequestFullScreen || docEl.msRequestFullscreen;
+            // Robust check for various fullscreen methods
+            const requestFS = docEl.requestFullscreen || 
+                              docEl.webkitRequestFullscreen || 
+                              docEl.mozRequestFullScreen || 
+                              docEl.msRequestFullscreen;
             
             if (requestFS) {
                 try { 
-                    await requestFS.call(docEl);
-                } catch (err) {
-                    console.log("Fullscreen request rejected.");
-                }
-            }
+                    // Attempt fullscreen
+                    const fsPromise = requestFS.call(docEl);
+                    
+                    // Attempt orientation lock immediately (some browsers require this sequence)
+                    if (screen.orientation && screen.orientation.lock) {
+                        await screen.orientation.lock('landscape').catch(() => {
+                            console.log("Orientation lock failed - may require fullscreen transition to finish.");
+                        });
+                    }
 
-            // Forced Orientation Lock (Android/Standard)
-            if (screen.orientation && screen.orientation.lock) {
-                try {
-                    await screen.orientation.lock('landscape');
+                    if (fsPromise instanceof Promise) {
+                        await fsPromise;
+                    }
                 } catch (err) {
-                    console.log("Orientation lock failed.");
+                    console.log("Fullscreen request rejected or failed.");
                 }
             }
         };
 
-        // Click handles both Fullscreen and Orientation lock most reliably
+        // Use pointerdown for immediate mobile response
         startOverlay.addEventListener('pointerdown', async (e) => {
             e.preventDefault();
             await enterFullscreenAndLock();
