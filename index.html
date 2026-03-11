@@ -50,7 +50,7 @@
         #start-overlay p { font-size: 18px; opacity: 0.9; border: 2px solid #f1c40f; padding: 10px 30px; border-radius: 50px; transition: 0.3s; }
         #orientation-msg { color: #e74c3c; margin-top: 20px; font-weight: bold; display: none; }
 
-        /* Base GUI */
+        /* Base GUI - Desktop/Large Tablet Default */
         #gui {
             position: absolute;
             top: var(--safe-top);
@@ -63,7 +63,7 @@
             border-left: 4px solid #f1c40f;
             z-index: 10;
             box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-            width: 180px;
+            width: 220px;
             transition: all 0.3s ease;
             display: none;
         }
@@ -137,19 +137,19 @@
         .slider-label { font-size: 10px; font-weight: 800; display: block; margin-bottom: 4px; color: #7f8c8d; text-transform: uppercase; }
         input[type=range] { width: 100%; cursor: pointer; height: 6px; background: #dfe6e9; border-radius: 5px; outline: none; pointer-events: auto; }
 
-        /* Pedals container */
+        /* Pedals container - Desktop/Large Tablet Default */
         #pedal-container {
             position: absolute;
-            bottom: var(--safe-bottom);
-            left: var(--safe-left);
+            bottom: 40px;
+            left: 40px;
             display: none;
-            gap: 15px;
+            gap: 20px;
             align-items: flex-end;
             z-index: 100;
         }
         .pedal {
-            width: 75px;
-            height: 120px;
+            width: 90px;
+            height: 140px;
             background: rgba(30, 30, 30, 0.95);
             border: 3px solid #fff;
             border-radius: 12px;
@@ -167,15 +167,15 @@
             background: rgba(60, 60, 60, 1);
             border-color: #f1c40f;
         }
-        #pedal-brake { height: 90px; width: 110px; } 
+        #pedal-brake { width: 130px; height: 110px; } 
 
-        /* Steering wheel controller */
+        /* Steering wheel controller - Desktop/Large Tablet Default */
         #steering-container {
             position: absolute;
-            bottom: var(--safe-bottom);
-            right: var(--safe-right);
-            width: 140px;
-            height: 140px;
+            bottom: 40px;
+            right: 40px;
+            width: 220px;
+            height: 220px;
             z-index: 100;
             display: none;
             pointer-events: auto;
@@ -188,9 +188,15 @@
             pointer-events: none;
         }
 
-        /* Mobile Adjustments - Smaller Pedals and Tighter Margins */
-        @media (max-width: 768px) {
-            #gui { top: 10px; left: 10px; width: 150px; padding: 8px; }
+        /* --- MOBILE ADJUSTMENTS (Phones Landscape/Portrait) --- */
+        /* Applied when width is less than 950px OR height is very small (Landscape) */
+        @media (max-width: 950px), (max-height: 500px) {
+            #gui { 
+                top: 10px; 
+                left: 10px; 
+                width: 150px; 
+                padding: 8px; 
+            }
             #slider-menu { max-height: 140px; }
             .stat { font-size: 10px; }
             .action-btn { font-size: 9px; padding: 6px 8px; }
@@ -198,21 +204,27 @@
             #menu-btn { font-size: 20px; top: 2px; }
             
             /* Reduced margin to 10px to match GUI Block */
-            #pedal-container { bottom: 10px; left: 10px; gap: 10px; }
-            /* Significantly reduced pedal sizes */
-            .pedal { width: 50px; height: 85px; font-size: 11px; border-width: 2px; }
+            #pedal-container { 
+                bottom: 10px; 
+                left: 10px; 
+                gap: 10px; 
+            }
+            /* Significantly reduced pedal sizes for mobile */
+            .pedal { 
+                width: 50px; 
+                height: 85px; 
+                font-size: 11px; 
+                border-width: 2px; 
+            }
             #pedal-brake { height: 65px; width: 80px; }
             
-            /* Smaller Steering wheel for mobile landscape */
-            #steering-container { bottom: 10px; right: 10px; width: 110px; height: 110px; }
-        }
-
-        @media (min-width: 769px) {
-            #gui { width: 220px; }
-            #pedal-container { bottom: 40px; left: 40px; }
-            .pedal { width: 90px; height: 140px; }
-            #pedal-brake { width: 130px; height: 110px; }
-            #steering-container { bottom: 40px; right: 40px; width: 220px; height: 220px; }
+            /* Smaller Steering wheel for mobile */
+            #steering-container { 
+                bottom: 10px; 
+                right: 10px; 
+                width: 110px; 
+                height: 110px; 
+            }
         }
 
         canvas { display: block; width: 100%; height: 100dvh; }
@@ -306,9 +318,9 @@
             }
         };
 
-        startOverlay.addEventListener('pointerup', async (e) => {
+        startOverlay.addEventListener('pointerdown', (e) => {
             e.preventDefault();
-            await enterFullscreen();
+            enterFullscreen();
             startOverlay.style.display = 'none';
             document.getElementById('gui').style.display = 'block';
             document.getElementById('pedal-container').style.display = 'flex';
