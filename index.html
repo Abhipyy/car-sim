@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>3D Car Mechanical - iPhone Pro Edition</title>
+    <title>3D Car Mechanical - Mobile Pro Edition</title>
     <style>
         :root {
             --safe-top: env(safe-area-inset-top, 20px);
@@ -12,23 +12,27 @@
             --safe-right: env(safe-area-inset-right, 20px);
         }
 
-        body { 
-            margin: 0; 
-            overflow: hidden; 
-            font-family: 'Segoe UI', sans-serif; 
-            background: #000; 
-            touch-action: none;
-            /* Prevent all selection and highlighing on iPhone */
+        * {
+            /* Prevent all native selection, zooming, and context menus */
             -webkit-user-select: none;
             user-select: none;
             -webkit-tap-highlight-color: transparent;
+            -webkit-touch-callout: none;
+            touch-action: none;
+        }
+
+        body { 
+            margin: 0; 
+            overflow: hidden; 
+            font-family: 'Segoe UI', system-ui, sans-serif; 
+            background: #000; 
         }
         
-        /* Start Overlay for Fullscreen */
+        /* Start Overlay */
         #start-overlay {
             position: fixed;
             top: 0; left: 0; width: 100%; height: 100dvh;
-            background: rgba(0,0,0,0.9);
+            background: rgba(0,0,0,0.95);
             color: white;
             display: flex;
             flex-direction: column;
@@ -38,9 +42,11 @@
             cursor: pointer;
             text-align: center;
             padding: 20px;
+            box-sizing: border-box;
         }
-        #start-overlay h1 { margin-bottom: 10px; font-size: 28px; color: #f1c40f; text-transform: uppercase; letter-spacing: 2px; }
-        #start-overlay p { font-size: 18px; opacity: 0.9; border: 2px solid #f1c40f; padding: 10px 20px; border-radius: 50px; }
+        #start-overlay h1 { margin-bottom: 10px; font-size: clamp(24px, 5vw, 36px); color: #f1c40f; text-transform: uppercase; letter-spacing: 2px; }
+        #start-overlay p { font-size: 18px; opacity: 0.9; border: 2px solid #f1c40f; padding: 10px 30px; border-radius: 50px; transition: 0.3s; }
+        #orientation-msg { color: #e74c3c; margin-top: 20px; font-weight: bold; display: none; }
 
         /* Base GUI */
         #gui {
@@ -77,7 +83,6 @@
             display: block;
             width: 100%;
         }
-        .action-btn:active { background: #2c3e50; }
 
         #reset-btn {
             position: absolute;
@@ -123,17 +128,12 @@
             padding-right: 8px;
         }
         
-        #slider-menu-title {
-            font-weight: bold; font-size: 11px; margin-bottom: 12px;
-            border-bottom: 1px solid #ddd; padding-bottom: 4px; color: #2c3e50;
-        }
-        
+        #slider-menu::-webkit-scrollbar { width: 4px; }
+        #slider-menu::-webkit-scrollbar-thumb { background: #bdc3c7; border-radius: 10px; }
+
         .slider-group { margin-bottom: 12px; }
-        .slider-label {
-            font-size: 10px; font-weight: 800; display: block; margin-bottom: 4px;
-            color: #7f8c8d; text-transform: uppercase;
-        }
-        input[type=range] { width: 100%; cursor: pointer; height: 6px; background: #dfe6e9; border-radius: 5px; outline: none; }
+        .slider-label { font-size: 10px; font-weight: 800; display: block; margin-bottom: 4px; color: #7f8c8d; text-transform: uppercase; }
+        input[type=range] { width: 100%; cursor: pointer; height: 6px; background: #dfe6e9; border-radius: 5px; outline: none; pointer-events: auto; }
 
         /* Pedals container */
         #pedal-container {
@@ -156,11 +156,9 @@
             align-items: center;
             justify-content: center;
             font-weight: bold;
-            user-select: none;
-            -webkit-user-select: none;
-            touch-action: none;
             text-align: center;
             font-size: 14px;
+            pointer-events: auto;
         }
         .pedal.active {
             transform: scale(0.95) translateY(5px);
@@ -177,10 +175,8 @@
             width: 140px;
             height: 140px;
             z-index: 100;
-            user-select: none;
-            -webkit-user-select: none;
-            touch-action: none;
             display: none;
+            pointer-events: auto;
         }
         #ui-wheel {
             width: 100%;
@@ -205,7 +201,8 @@
 
     <div id="start-overlay">
         <h1>CAR SIMULATOR</h1>
-        <p>TAP TO START</p>
+        <p id="start-btn-text">TAP TO START</p>
+        <div id="orientation-msg">PLEASE ROTATE DEVICE TO LANDSCAPE</div>
     </div>
 
     <div id="gui">
@@ -219,7 +216,6 @@
         </div>
         
         <div id="slider-menu">
-            <div id="slider-menu-title">SETTINGS</div>
             <div class="slider-group">
                 <span class="slider-label">SPEED LIMITER: <span id="limit-val">30</span></span>
                 <input type="range" id="limit-slider" min="10" max="60" step="5" value="30">
@@ -250,7 +246,18 @@
     <script>
         // --- Initialization & UI Helpers ---
         const startOverlay = document.getElementById('start-overlay');
+        const orientMsg = document.getElementById('orientation-msg');
         
+        function updateOrientationUI() {
+            const isPortrait = window.innerHeight > window.innerWidth;
+            const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+            orientMsg.style.display = (isMobile && isPortrait) ? 'block' : 'none';
+        }
+
+        window.addEventListener('resize', updateOrientationUI);
+        window.addEventListener('orientationchange', updateOrientationUI);
+        updateOrientationUI();
+
         const enterFullscreen = () => {
             const docEl = window.document.documentElement;
             const requestFS = docEl.requestFullscreen || docEl.mozRequestFullScreen || docEl.webkitRequestFullScreen || docEl.msRequestFullscreen;
@@ -262,7 +269,8 @@
             }
         };
 
-        startOverlay.addEventListener('click', () => {
+        startOverlay.addEventListener('pointerdown', (e) => {
+            e.preventDefault();
             enterFullscreen();
             startOverlay.style.display = 'none';
             document.getElementById('gui').style.display = 'block';
@@ -296,7 +304,7 @@
         scene.fog = new THREE.Fog(0x87ceeb, 200, 800);
         const camera = new THREE.PerspectiveCamera(CONFIG.fov, window.innerWidth / window.innerHeight, 0.1, 2000);
         const renderer = new THREE.WebGLRenderer({ antialias: true });
-        renderer.setPixelRatio(window.devicePixelRatio);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
         renderer.setSize(window.innerWidth, window.innerHeight);
         renderer.shadowMap.enabled = true;
         document.body.appendChild(renderer.domElement);
@@ -311,7 +319,7 @@
         const matBorder = new THREE.MeshPhongMaterial({ color: 0x000000 });
         const matLine = new THREE.MeshBasicMaterial({ color: 0xffff00 }); 
         const matChassis = new THREE.MeshPhongMaterial({ color: 0x3498db, transparent: true, opacity: 0.15 });
-        const matMech = new THREE.MeshPhongMaterial({ color: 0x8B4513 }); // Brown
+        const matMech = new THREE.MeshPhongMaterial({ color: 0x8B4513 });
         const matChrome = new THREE.MeshPhongMaterial({ color: 0xffffff });
         const matRock = new THREE.MeshPhongMaterial({ color: 0x666666, flatShading: true });
 
@@ -358,7 +366,6 @@
             const roadV = new THREE.Mesh(new THREE.PlaneGeometry(CONFIG.roadWidth, totalSize + CONFIG.roadWidth), matRoad);
             roadV.rotation.x = -Math.PI / 2; roadV.position.set(pos, 0, 0); worldGroup.add(roadV);
 
-            // Dash lines
             const lineW = 0.5, lineL = 8, gap = 8;
             for(let i = 0; i < Math.floor((totalSize + CONFIG.roadWidth) / (lineL + gap)); i++) {
                 const off = (i * (lineL + gap)) - ((totalSize + CONFIG.roadWidth) / 2) + lineL;
@@ -401,11 +408,11 @@
         const spoke2 = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.35, 0.03), matMech); spoke2.position.y = -0.17; steerWheelGroup.add(spoke2);
         steerWheelGroup.position.set(driverX, 1.65, 0.8); steerWheelGroup.rotation.x = Math.PI / 4; car.add(steerWheelGroup);
 
-        // --- Controls Logic (Multi-Pointer Aware) ---
+        // --- Improved Input Logic ---
         const inputs = { w: false, space: false, a: false, d: false };
-        let pedalAccelActive = false, pedalBrakeActive = false;
         let speed = 0, steerAngle = 0;
         let steerPointerId = null, steerLastAngle = 0;
+        let activePedalPointers = new Map();
 
         window.addEventListener('keydown', (e) => { 
             const k = e.key.toLowerCase(); if (k === 'w') inputs.w = true; if (k === ' ') inputs.space = true;
@@ -417,23 +424,28 @@
             if (k === 'a') inputs.a = false; if (k === 'd') inputs.d = false;
         });
 
-        const setupPedal = (id, setter) => {
+        // Robust Pedal Handlers
+        const setupPedal = (id, pedalKey) => {
             const el = document.getElementById(id);
-            // pointerdown + preventDefault + setPointerCapture is key for iPhone
-            el.addEventListener('pointerdown', (e) => { 
-                e.preventDefault(); 
-                el.classList.add('active'); 
-                setter(true); 
+            el.addEventListener('pointerdown', (e) => {
+                e.preventDefault();
                 el.setPointerCapture(e.pointerId);
+                el.classList.add('active');
+                activePedalPointers.set(e.pointerId, pedalKey);
             });
-            const release = () => { el.classList.remove('active'); setter(false); };
+            const release = (e) => {
+                if (activePedalPointers.has(e.pointerId)) {
+                    el.classList.remove('active');
+                    activePedalPointers.delete(e.pointerId);
+                }
+            };
             el.addEventListener('pointerup', release);
             el.addEventListener('pointercancel', release);
-            el.addEventListener('pointerleave', release);
         };
-        setupPedal('pedal-accel', (v) => pedalAccelActive = v);
-        setupPedal('pedal-brake', (v) => pedalBrakeActive = v);
+        setupPedal('pedal-accel', 'w');
+        setupPedal('pedal-brake', 'space');
 
+        // Robust Steering Handler
         const wheelCont = document.getElementById('steering-container'), wheelEl = document.getElementById('ui-wheel');
         const getSteerAngleFromCoords = (clientX, clientY) => {
             const rect = wheelCont.getBoundingClientRect();
@@ -458,8 +470,17 @@
             steerLastAngle = currentAngle;
         });
 
-        window.addEventListener('pointerup', (e) => { if (e.pointerId === steerPointerId) steerPointerId = null; });
-        window.addEventListener('pointercancel', (e) => { if (e.pointerId === steerPointerId) steerPointerId = null; });
+        const releaseSteer = (e) => { if (e.pointerId === steerPointerId) steerPointerId = null; };
+        window.addEventListener('pointerup', releaseSteer);
+        window.addEventListener('pointercancel', releaseSteer);
+
+        // Global recovery for stuck inputs
+        window.addEventListener('blur', () => {
+            inputs.w = inputs.space = inputs.a = inputs.d = false;
+            activePedalPointers.clear();
+            steerPointerId = null;
+            document.querySelectorAll('.pedal').forEach(p => p.classList.remove('active'));
+        });
 
         function redoPosition() {
             car.position.set(0, 0, 0); car.rotation.y = 0; speed = 0; steerAngle = 0;
@@ -473,7 +494,8 @@
         document.getElementById('toggle-btn').addEventListener('click', toggleObstacles);
 
         const menuBtn = document.getElementById('menu-btn'), sliderMenu = document.getElementById('slider-menu'), statsDisplay = document.getElementById('stats-display');
-        menuBtn.addEventListener('click', () => {
+        menuBtn.addEventListener('pointerdown', (e) => {
+            e.stopPropagation();
             const open = sliderMenu.style.display === 'block';
             sliderMenu.style.display = open ? 'none' : 'block';
             statsDisplay.style.display = open ? 'block' : 'none';
@@ -484,8 +506,11 @@
         document.getElementById('density-slider').addEventListener('input', (e) => { CONFIG.rockDensity = parseInt(e.target.value); document.getElementById('density-val').innerText = CONFIG.rockDensity; generateAllRocks(); });
 
         function update() {
-            if (inputs.w || pedalAccelActive) speed += CONFIG.acceleration;
-            if (inputs.space || pedalBrakeActive) {
+            const isAccel = inputs.w || Array.from(activePedalPointers.values()).includes('w');
+            const isBrake = inputs.space || Array.from(activePedalPointers.values()).includes('space');
+
+            if (isAccel) speed += CONFIG.acceleration;
+            if (isBrake) {
                 if (speed > 0.5) speed -= CONFIG.brakingPower;
                 else speed -= CONFIG.acceleration * 0.8;
             }
