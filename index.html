@@ -29,6 +29,7 @@
             touch-action: none;
         }
         
+        /* Start Overlay */
         #start-overlay {
             position: fixed;
             top: 0; left: 0; width: 100%; height: 100dvh;
@@ -48,17 +49,55 @@
         #start-overlay p { font-size: 18px; opacity: 0.9; border: 2px solid #f1c40f; padding: 10px 30px; border-radius: 50px; transition: 0.3s; }
         #orientation-msg { color: #e74c3c; margin-top: 20px; font-weight: bold; display: none; }
 
+        /* Controls Help Overlay */
+        #controls-overlay {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100dvh;
+            background: rgba(0,0,0,0.6);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            color: white;
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 2000;
+            cursor: pointer;
+        }
+        .control-list {
+            background: rgba(255,255,255,0.1);
+            padding: 30px;
+            border-radius: 20px;
+            max-width: 400px;
+            width: 80%;
+            border: 1px solid rgba(255,255,255,0.2);
+        }
+        .control-item {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 12px;
+            font-size: 16px;
+        }
+        .key {
+            background: #f1c40f;
+            color: #000;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-weight: bold;
+            font-family: monospace;
+        }
+
         /* Top Right Counter */
         #hit-counter-box {
             position: absolute;
             top: var(--safe-top);
             right: var(--safe-right);
-            background: rgba(255, 255, 255, 0.9);
+            background: rgba(255, 255, 255, 0.7); /* Increased transparency */
             padding: 8px 15px;
             border-radius: 8px;
             font-weight: bold;
             color: #c0392b;
-            box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+            box-shadow: 0 4px 10px rgba(0,0,0,0.1);
             z-index: 10;
             display: none;
             font-size: 14px;
@@ -70,20 +109,21 @@
             top: var(--safe-top);
             left: var(--safe-left);
             color: #333;
-            background: rgba(255, 255, 255, 0.95);
+            background: rgba(255, 255, 255, 0.7); /* Increased transparency - more transparent */
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
             padding: 12px;
             border-radius: 8px;
             pointer-events: auto;
             border-left: 4px solid #f1c40f;
             z-index: 10;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
             width: 200px;
             display: none;
             touch-action: pan-y;
             max-height: 85dvh;
         }
 
-        /* Top Action Bar in GUI */
         #gui-header {
             display: flex;
             justify-content: flex-end;
@@ -127,11 +167,12 @@
             display: block;
             width: 100%;
         }
+        #btn-controls { background: #8e44ad; } /* Purple for controls button */
 
         #slider-menu {
             margin-top: 10px;
             display: none;
-            max-height: 180px; 
+            max-height: 250px; 
             overflow-y: auto;
             touch-action: pan-y !important;
             -webkit-overflow-scrolling: touch;
@@ -144,12 +185,11 @@
         .slider-group { margin-bottom: 15px; }
         .slider-label { font-size: 10px; font-weight: 800; display: block; margin-bottom: 6px; color: #7f8c8d; text-transform: uppercase; }
         
-        /* Clean Slider Styling to fix "Gray Box" glitches */
         input[type=range] { 
             -webkit-appearance: none;
             width: 100%; 
             height: 6px; 
-            background: #dfe6e9; 
+            background: rgba(0,0,0,0.1); 
             border-radius: 5px; 
             outline: none; 
             pointer-events: auto; 
@@ -168,7 +208,6 @@
             box-shadow: 0 1px 3px rgba(0,0,0,0.2);
         }
 
-        /* Pedals container */
         #pedal-container {
             position: absolute;
             bottom: 40px;
@@ -181,7 +220,7 @@
         .pedal {
             width: 90px;
             height: 140px;
-            background: rgba(30, 30, 30, 0.95);
+            background: rgba(30, 30, 30, 0.85);
             border: 3px solid #fff;
             border-radius: 12px;
             color: #fff;
@@ -213,12 +252,11 @@
         #ui-wheel {
             width: 100%;
             height: 100%;
-            background: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><circle cx="50" cy="50" r="46" fill="rgba(30,30,30,0.85)" stroke="white" stroke-width="4"/><circle cx="50" cy="50" r="38" fill="none" stroke="rgba(255,255,255,0.1)" stroke-width="1"/><line x1="50" y1="4" x2="50" y2="20" stroke="yellow" stroke-width="4"/><path d="M15 35 L85 35 M50 35 L50 90" stroke="white" stroke-width="6" fill="none" stroke-linecap="round"/><circle cx="50" cy="50" r="8" fill="white"/></svg>') no-repeat center;
+            background: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><circle cx="50" cy="50" r="46" fill="rgba(30,30,30,0.7)" stroke="white" stroke-width="4"/><circle cx="50" cy="50" r="38" fill="none" stroke="rgba(255,255,255,0.1)" stroke-width="1"/><line x1="50" y1="4" x2="50" y2="20" stroke="yellow" stroke-width="4"/><path d="M15 35 L85 35 M50 35 L50 90" stroke="white" stroke-width="6" fill="none" stroke-linecap="round"/><circle cx="50" cy="50" r="8" fill="white"/></svg>') no-repeat center;
             background-size: contain;
             pointer-events: none;
         }
 
-        /* Mobile Scale */
         @media (max-width: 950px), (max-height: 500px) {
             #gui { top: 10px; left: 10px; width: 185px; padding: 10px; }
             #hit-counter-box { top: 10px; right: 10px; padding: 5px 10px; font-size: 12px; }
@@ -237,6 +275,20 @@
         <h1>CAR SIMULATOR</h1>
         <p id="start-btn-text">TAP TO START</p>
         <div id="orientation-msg">PLEASE ROTATE DEVICE TO LANDSCAPE</div>
+    </div>
+
+    <div id="controls-overlay">
+        <div class="control-list">
+            <h2 style="text-align:center; color:#f1c40f; margin-top:0;">GAME CONTROLS</h2>
+            <div class="control-item"><span>Acceleration</span> <span class="key">W</span></div>
+            <div class="control-item"><span>Brake / Reverse</span> <span class="key">SPACE</span></div>
+            <div class="control-item"><span>Steer Left</span> <span class="key">A</span></div>
+            <div class="control-item"><span>Steer Right</span> <span class="key">D</span></div>
+            <div class="control-item"><span>Auto Accel</span> <span class="key">AUTO / A</span></div>
+            <div class="control-item"><span>Clear Stuck Rock</span> <span class="key">CLEAR / C</span></div>
+            <div class="control-item"><span>Reset Position</span> <span class="key">RESET / R</span></div>
+            <p style="text-align:center; font-size:12px; opacity:0.6; margin-top:20px;">TAP ANYWHERE TO CLOSE</p>
+        </div>
     </div>
 
     <div id="hit-counter-box">ROCK HITS: <span id="rock-hit-count">0</span></div>
@@ -259,17 +311,18 @@
             <div style="font-weight: bold; font-size: 11px; margin-bottom: 12px; border-bottom: 1px solid #ddd; padding-bottom: 4px; color: #2c3e50;">SETTINGS</div>
             <div class="slider-group">
                 <span class="slider-label">SPEED LIMITER: <span id="limit-val">30</span></span>
-                <input type="range" id="limit-slider" min="10" max="60" step="5" value="30">
+                <input type="range" id="limit-slider" min="10" max="40" step="5" value="30">
             </div>
             <div class="slider-group">
-                <span class="slider-label">STEER SENSITIVITY: <span id="sens-val">1.0</span>x</span>
-                <input type="range" id="sens-slider" min="0.1" max="1.0" step="0.1" value="1.0">
+                <span class="slider-label">STEER SENSITIVITY: <span id="sens-val">0.4</span>x</span>
+                <input type="range" id="sens-slider" min="0.1" max="1.0" step="0.1" value="0.4">
             </div>
             <div class="slider-group">
                 <span class="slider-label">ROCK DENSITY: <span id="density-val">15</span></span>
                 <input type="range" id="density-slider" min="0" max="40" step="1" value="15">
             </div>
             <button id="toggle-btn" class="action-btn">TOGGLE VISIBILITY (O)</button>
+            <button id="btn-controls" class="action-btn">CONTROLS HELP</button>
         </div>
     </div>
 
@@ -285,12 +338,10 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 
     <script>
-        // Prevent all vibration-triggering long presses
+        // Force context menu and touch-start selection blocking
         document.addEventListener('contextmenu', e => e.preventDefault());
         document.addEventListener('touchstart', e => {
             if (e.target.closest('.pedal') || e.target.closest('.gui-btn') || e.target.type === 'range') {
-                // Do not preventDefault for range inputs to allow dragging, 
-                // but do it for buttons to stop haptics.
                 if(!e.target.type === 'range') e.preventDefault(); 
             }
         }, {passive: true});
@@ -316,7 +367,13 @@
             const docEl = window.document.documentElement;
             const requestFS = docEl.requestFullscreen || docEl.webkitRequestFullscreen || docEl.mozRequestFullScreen || docEl.msRequestFullscreen;
             if (requestFS) {
-                try { await requestFS.call(docEl); } catch (err) {}
+                try { 
+                    await requestFS.call(docEl);
+                    // Force Landscape on Start
+                    if (screen.orientation && screen.orientation.lock) {
+                        await screen.orientation.lock('landscape').catch(() => {});
+                    }
+                } catch (err) {}
             }
         };
 
@@ -329,6 +386,19 @@
             document.getElementById('steering-container').style.display = 'block';
         });
 
+        // Close settings when clicking outside
+        window.addEventListener('pointerdown', (e) => {
+            const menu = document.getElementById('slider-menu');
+            const gui = document.getElementById('gui');
+            const btnMenu = document.getElementById('btn-menu');
+            
+            // If slider menu is open and we click outside the gui block
+            if (menu.style.display === 'block' && !gui.contains(e.target)) {
+                menu.style.display = 'none';
+                document.getElementById('stats-display').style.display = 'block';
+            }
+        });
+
         // --- Config ---
         const CONFIG = {
             acceleration: 1.2,
@@ -337,7 +407,7 @@
             maxSpeed: 30,          
             maxReverseSpeed: -15,
             maxSteer: 80 * (Math.PI / 180), 
-            steerSensitivity: 1.0, 
+            steerSensitivity: 0.4, // Default changed to 0.4
             rockDensity: 15,
             fov: 65,
             roadWidth: 18,          
@@ -459,7 +529,7 @@
 
         window.addEventListener('keydown', (e) => { 
             const k = e.key.toLowerCase(); if (k === 'w') inputs.w = true; if (k === ' ') inputs.space = true;
-            if (k === 'a') { inputs.a = true; autoLock = false; } if (k === 'd') { inputs.d = true; autoLock = false; }
+            if (k === 'a') { inputs.a = true; } if (k === 'd') { inputs.d = true; }
             if (k === 'o') toggleObstacles(); if (k === 'r') redoPosition();
             if (k === 'c') clearStuckRock();
         });
@@ -493,6 +563,15 @@
             const open = menu.style.display === 'block';
             menu.style.display = open ? 'none' : 'block';
             stats.style.display = open ? 'block' : 'none';
+        });
+
+        document.getElementById('btn-controls').addEventListener('click', (e) => {
+            e.stopPropagation();
+            document.getElementById('controls-overlay').style.display = 'flex';
+        });
+
+        document.getElementById('controls-overlay').addEventListener('click', () => {
+            document.getElementById('controls-overlay').style.display = 'none';
         });
 
         document.getElementById('toggle-btn').addEventListener('pointerdown', (e) => {
@@ -565,7 +644,6 @@
             s.innerText = txt; s.style.color = col;
         }
 
-        // --- Updated Settings Listeners with Dynamic Numbers ---
         document.getElementById('limit-slider').addEventListener('input', (e) => { 
             CONFIG.maxSpeed = parseInt(e.target.value); 
             document.getElementById('limit-val').innerText = CONFIG.maxSpeed;
@@ -584,8 +662,6 @@
         function update() {
             const isBrake = inputs.space || Array.from(activePedalPointers.values()).includes('space');
             const isAccelManual = inputs.w || Array.from(activePedalPointers.values()).includes('w');
-            
-            // Auto responds if brk released
             const isAccel = isAccelManual || (autoLock && !isBrake);
 
             if (isBrake) {
@@ -617,12 +693,9 @@
             else if (roadZ && !roadX) nextZ = Math.max(roadZ.center - clampLimit, Math.min(roadZ.center + clampLimit, nextZ));
 
             let hitRock = false;
-            // No reset currentlyStuckRock here to allow "C" button to work after collision stops the car
             if (obstaclesEnabled) {
                 rocks.forEach(rock => {
-                    const dx = nextX - rock.position.x;
-                    const dz = nextZ - rock.position.z;
-                    const dist = Math.sqrt(dx*dx + dz*dz);
+                    const dist = Math.sqrt((nextX - rock.position.x)**2 + (nextZ - rock.position.z)**2);
                     if (dist < 1.3 + rock.userData.radius) {
                         hitRock = true;
                         currentlyStuckRock = rock;
