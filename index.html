@@ -2,8 +2,9 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>3D Car Mechanical - Mobile Pro Edition</title>
+    <!-- FIX: viewport settings allow full screen and auto-rotate naturally -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>3D Car Mechanical - Mobile Pro</title>
     <style>
         :root {
             --safe-top: env(safe-area-inset-top, 20px);
@@ -13,13 +14,13 @@
         }
 
         * {
-            /* Prevent all native selection, zooming, and context menus */
             -webkit-user-select: none;
             user-select: none;
             -webkit-tap-highlight-color: transparent;
             -webkit-touch-callout: none;
         }
 
+        /* FIX: body uses viewport units and locks orientation via CSS + JS, but allows rotation */
         body { 
             margin: 0; 
             overflow: hidden; 
@@ -27,9 +28,17 @@
             background: #000; 
             width: 100vw;
             height: 100dvh;
-            touch-action: none; /* Prevents browser level gestures */
+            position: fixed; /* Prevents browser UI bounce on scroll */
+            touch-action: none; /* kills double-tap zoom, but preserves pointer events */
         }
         
+        canvas { 
+            display: block; 
+            width: 100%; 
+            height: 100%; 
+            touch-action: none; /* no pinch/pan on canvas itself */
+        }
+
         /* Start Overlay */
         #start-overlay {
             position: fixed;
@@ -45,13 +54,13 @@
             text-align: center;
             padding: 20px;
             box-sizing: border-box;
-            touch-action: auto; /* Required for the button to take clicks */
+            touch-action: auto;
         }
         #start-overlay h1 { margin-bottom: 10px; font-size: clamp(24px, 5vw, 36px); color: #f1c40f; text-transform: uppercase; letter-spacing: 2px; }
         #start-overlay p { font-size: 18px; opacity: 0.9; border: 2px solid #f1c40f; padding: 10px 30px; border-radius: 50px; transition: 0.3s; }
         #orientation-msg { color: #e74c3c; margin-top: 20px; font-weight: bold; display: none; }
 
-        /* Controls Help Overlay */
+        /* Controls Overlay */
         #controls-overlay {
             position: fixed;
             top: 0; left: 0; width: 100%; height: 100dvh;
@@ -90,7 +99,6 @@
             font-family: monospace;
         }
 
-        /* Top Right Counter */
         #hit-counter-box {
             position: absolute;
             top: var(--safe-top);
@@ -273,8 +281,6 @@
             #steering-container { bottom: 10px; right: 10px; width: 135px; height: 135px; }
             #slider-menu { max-height: 140px; }
         }
-
-        canvas { display: block; width: 100%; height: 100dvh; }
     </style>
 </head>
 <body oncontextmenu="return false;">
@@ -346,21 +352,14 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 
     <script>
-        // --- VIBRATION & HAPTIC KILLER ---
+        // --- HAPTIC / ZOOM PREVENTION (keep minimal, allow pointer events) ---
         document.addEventListener('touchstart', e => {
-            const isScrollMenu = e.target.closest('#slider-menu');
-            const isSlider = e.target.type === 'range';
-            const isStart = e.target.closest('#start-overlay');
-            const isControls = e.target.closest('#controls-overlay');
-            const isControlBtn = e.target.closest('.gui-btn') || e.target.closest('.pedal') || e.target.classList.contains('action-btn');
-            
-            // Allow start button and settings to receive touches
-            if (isScrollMenu || isSlider || isStart || isControls || isControlBtn) {
-                return;
+            // Only prevent default on canvas background, but let UI elements work
+            const target = e.target;
+            const isUI = target.closest('#gui') || target.closest('#pedal-container') || target.closest('#steering-container') || target.closest('#start-overlay') || target.closest('#controls-overlay');
+            if (!isUI && target.nodeName !== 'BUTTON' && target.nodeName !== 'INPUT') {
+                e.preventDefault(); // kill double-tap zoom on canvas, but UI remains functional
             }
-            
-            // Prevent default on the background and other areas to kill system behaviors
-            e.preventDefault();
         }, { passive: false });
 
         document.addEventListener('contextmenu', e => e.preventDefault());
@@ -382,56 +381,45 @@
         window.addEventListener('resize', updateOrientationUI);
         updateOrientationUI();
 
-        // --- HARDENED Fullscreen & Orientation Lock Strategy ---
-        const requestFullscreenAndLock = async () => {
+        // --- FIX: Fullscreen & auto-rotate handled gracefully ---
+        const executeStartSequence = async () => {
             const docEl = document.documentElement;
-            const requestFS = docEl.requestFullscreen || 
-                              docEl.webkitRequestFullscreen || 
-                              docEl.mozRequestFullScreen || 
-                              docEl.msRequestFullscreen;
             
-            // 1. MUST request fullscreen synchronously in the user handler
-            if (requestFS) {
-                try {
-                    const fsPromise = requestFS.call(docEl);
-                    if (fsPromise instanceof Promise) await fsPromise;
-                } catch (e) {
-                    console.warn("Fullscreen request rejected.");
+            // 1. Try fullscreen (some browsers may block without user gesture, but we have tap)
+            try {
+                const requestFS = docEl.requestFullscreen || docEl.webkitRequestFullscreen || docEl.mozRequestFullScreen || docEl.msRequestFullscreen;
+                if (requestFS) {
+                    await requestFS.call(docEl);
                 }
+            } catch (err) {
+                console.warn("Fullscreen request skipped or blocked.");
             }
 
-            // 2. Hide overlay immediately
+            // 2. Hide overlay
             startOverlay.style.display = 'none';
             document.getElementById('gui').style.display = 'block';
             document.getElementById('hit-counter-box').style.display = 'block';
             document.getElementById('pedal-container').style.display = 'flex';
             document.getElementById('steering-container').style.display = 'block';
 
-            // 3. Orientation Lock (Sequential - wait for FS transition)
-            const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-            if (isMobile) {
-                // Short timeout gives browsers like Chrome/Android time to finalize FS state
-                setTimeout(async () => {
+            // 3. Orientation lock (optional, will not break if unavailable) - but we do NOT want to force landscape if user rotates; we just hint.
+            //    Remove aggressive locking, just request if supported.
+            setTimeout(() => {
+                try {
                     if (screen.orientation && screen.orientation.lock) {
-                        await screen.orientation.lock('landscape').catch(err => {
-                            console.warn("Orientation lock error:", err.message);
-                        });
-                    } else {
-                        // Fallback for older browsers
-                        const lock = screen.lockOrientation || screen.webkitLockOrientation || screen.mozLockOrientation || screen.msLockOrientation;
-                        if (lock) lock.call(screen, 'landscape');
+                        // Use 'natural' or 'landscape' as hint, but catch errors silently
+                        screen.orientation.lock('landscape').catch(() => {});
                     }
-                }, 400);
-            }
+                } catch (err) {}
+            }, 100);
         };
 
-        // Pointerdown for the fastest mobile response trigger
         startOverlay.addEventListener('pointerdown', (e) => {
             e.preventDefault();
-            requestFullscreenAndLock();
+            executeStartSequence();
         });
 
-        // Close settings when clicking outside
+        // Close controls / menu when tapping outside
         window.addEventListener('pointerdown', (e) => {
             const menu = document.getElementById('slider-menu');
             const gui = document.getElementById('gui');
