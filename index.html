@@ -45,7 +45,6 @@
             text-align: center;
             padding: 20px;
             box-sizing: border-box;
-            /* Allow touches specifically for this button */
             touch-action: auto;
         }
         #start-overlay h1 { margin-bottom: 10px; font-size: clamp(24px, 5vw, 36px); color: #f1c40f; text-transform: uppercase; letter-spacing: 2px; }
@@ -348,18 +347,15 @@
 
     <script>
         // --- VIBRATION & HAPTIC KILLER ---
-        // Refined touchstart logic to ensure interactive elements are not blocked
+        // Block browser defaults (magnifying glass, context menus, haptics)
         document.addEventListener('touchstart', e => {
-            const isInteractive = 
-                e.target.type === 'range' || 
-                e.target.closest('#slider-menu') || 
-                e.target.closest('#start-overlay') ||
-                e.target.closest('#controls-overlay') ||
-                e.target.classList.contains('gui-btn') ||
-                e.target.classList.contains('pedal');
+            const isScrollMenu = e.target.closest('#slider-menu');
+            const isSlider = e.target.type === 'range';
+            const isStart = e.target.closest('#start-overlay');
+            const isControls = e.target.closest('#controls-overlay');
             
-            // If it's NOT an intentional interactive element, prevent default to block zoom/haptics
-            if (!isInteractive) {
+            // Blocking touchstart for pedals and buttons kills the iOS haptic vibration.
+            if (!isScrollMenu && !isSlider) {
                 e.preventDefault();
             }
         }, { passive: false });
@@ -383,25 +379,33 @@
         window.addEventListener('resize', updateOrientationUI);
         updateOrientationUI();
 
-        const enterFullscreen = async () => {
+        const enterFullscreenAndLock = async () => {
             const docEl = window.document.documentElement;
+            // Native Fullscreen Request
             const requestFS = docEl.requestFullscreen || docEl.webkitRequestFullscreen || docEl.mozRequestFullScreen || docEl.msRequestFullscreen;
+            
             if (requestFS) {
                 try { 
                     await requestFS.call(docEl);
-                    if (screen.orientation && screen.orientation.lock) {
-                        await screen.orientation.lock('landscape').catch(() => {});
-                    }
                 } catch (err) {
-                    console.log("Fullscreen request rejected or failed.");
+                    console.log("Fullscreen request rejected.");
+                }
+            }
+
+            // Forced Orientation Lock (Android/Standard)
+            if (screen.orientation && screen.orientation.lock) {
+                try {
+                    await screen.orientation.lock('landscape');
+                } catch (err) {
+                    console.log("Orientation lock failed.");
                 }
             }
         };
 
-        // Use pointerdown for immediate mobile response
+        // Click handles both Fullscreen and Orientation lock most reliably
         startOverlay.addEventListener('pointerdown', async (e) => {
             e.preventDefault();
-            await enterFullscreen();
+            await enterFullscreenAndLock();
             startOverlay.style.display = 'none';
             document.getElementById('gui').style.display = 'block';
             document.getElementById('hit-counter-box').style.display = 'block';
@@ -595,7 +599,6 @@
         const setupPedal = (id, pedalKey) => {
             const el = document.getElementById(id);
             el.addEventListener('pointerdown', (e) => {
-                e.preventDefault(); e.stopPropagation();
                 el.setPointerCapture(e.pointerId);
                 el.classList.add('active');
                 activePedalPointers.set(e.pointerId, pedalKey);
@@ -616,7 +619,6 @@
         };
 
         wheelCont.addEventListener('pointerdown', (e) => {
-            e.preventDefault(); e.stopPropagation();
             if (steerPointerId !== null) return;
             steerPointerId = e.pointerId;
             steerLastAngle = getSteerAngleFromCoords(e.clientX, e.clientY);
