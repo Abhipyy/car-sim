@@ -382,50 +382,53 @@
         window.addEventListener('resize', updateOrientationUI);
         updateOrientationUI();
 
-        // --- REBUILT Fullscreen & Auto-Rotate Logic ---
-        const executeStartSequence = async () => {
+        // --- HARDENED Fullscreen & Orientation Lock Strategy ---
+        const requestFullscreenAndLock = async () => {
             const docEl = document.documentElement;
+            const requestFS = docEl.requestFullscreen || 
+                              docEl.webkitRequestFullscreen || 
+                              docEl.mozRequestFullScreen || 
+                              docEl.msRequestFullscreen;
             
-            // 1. Trigger Fullscreen (Highest Priority User Activation)
-            try {
-                const requestFS = docEl.requestFullscreen || docEl.webkitRequestFullscreen || docEl.mozRequestFullScreen || docEl.msRequestFullscreen;
-                if (requestFS) {
-                    await requestFS.call(docEl);
+            // 1. MUST request fullscreen synchronously in the user handler
+            if (requestFS) {
+                try {
+                    const fsPromise = requestFS.call(docEl);
+                    if (fsPromise instanceof Promise) await fsPromise;
+                } catch (e) {
+                    console.warn("Fullscreen request rejected.");
                 }
-            } catch (err) {
-                console.warn("Fullscreen request skipped or blocked.");
             }
 
-            // 2. Immediate UI Transition
+            // 2. Hide overlay immediately
             startOverlay.style.display = 'none';
             document.getElementById('gui').style.display = 'block';
             document.getElementById('hit-counter-box').style.display = 'block';
             document.getElementById('pedal-container').style.display = 'flex';
             document.getElementById('steering-container').style.display = 'block';
 
-            // 3. Sequential Orientation Lock
-            // We wait 300ms for the fullscreen transition to stabilize before locking
-            setTimeout(async () => {
-                try {
+            // 3. Orientation Lock (Sequential - wait for FS transition)
+            const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+            if (isMobile) {
+                // Short timeout gives browsers like Chrome/Android time to finalize FS state
+                setTimeout(async () => {
                     if (screen.orientation && screen.orientation.lock) {
-                        await screen.orientation.lock('landscape').catch(e => console.warn("Orientation lock error:", e.message));
-                    } else if (screen.lockOrientation) {
-                        screen.lockOrientation('landscape');
-                    } else if (screen.webkitLockOrientation) {
-                        screen.webkitLockOrientation('landscape');
-                    } else if (screen.mozLockOrientation) {
-                        screen.mozLockOrientation('landscape');
+                        await screen.orientation.lock('landscape').catch(err => {
+                            console.warn("Orientation lock error:", err.message);
+                        });
+                    } else {
+                        // Fallback for older browsers
+                        const lock = screen.lockOrientation || screen.webkitLockOrientation || screen.mozLockOrientation || screen.msLockOrientation;
+                        if (lock) lock.call(screen, 'landscape');
                     }
-                } catch (err) {
-                    console.warn("Rotation lock unavailable.");
-                }
-            }, 300);
+                }, 400);
+            }
         };
 
-        // Tap triggers the sequence
+        // Pointerdown for the fastest mobile response trigger
         startOverlay.addEventListener('pointerdown', (e) => {
             e.preventDefault();
-            executeStartSequence();
+            requestFullscreenAndLock();
         });
 
         // Close settings when clicking outside
