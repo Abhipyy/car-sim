@@ -45,7 +45,7 @@
             text-align: center;
             padding: 20px;
             box-sizing: border-box;
-            touch-action: auto; /* Required for the button to take clicks */
+            touch-action: auto; 
         }
         #start-overlay h1 { margin-bottom: 10px; font-size: clamp(24px, 5vw, 36px); color: #f1c40f; text-transform: uppercase; letter-spacing: 2px; }
         #start-overlay p { font-size: 18px; opacity: 0.9; border: 2px solid #f1c40f; padding: 10px 30px; border-radius: 50px; transition: 0.3s; }
@@ -347,20 +347,21 @@
 
     <script>
         // --- VIBRATION & HAPTIC KILLER ---
+        // We refined this to specifically ALLOW touch on the start overlay.
+        // If we block it here, the subsequent 'pointerdown' or 'click' won't be considered a "User Activation."
         document.addEventListener('touchstart', e => {
             const isScrollMenu = e.target.closest('#slider-menu');
             const isSlider = e.target.type === 'range';
             const isStart = e.target.closest('#start-overlay');
-            const isControls = e.target.closest('#controls-overlay');
-            const isControlBtn = e.target.closest('.gui-btn') || e.target.closest('.pedal') || e.target.classList.contains('action-btn');
             
-            // Allow start button and settings to receive touches
-            if (isScrollMenu || isSlider || isStart || isControls || isControlBtn) {
-                return;
+            // Allow the start overlay to process touches naturally so FS/Orientation works
+            if (isStart) return;
+
+            // For pedals and GUI buttons, we block touchstart to kill vibration, 
+            // but the Pointer Events API will still handle the interaction logic.
+            if (!isScrollMenu && !isSlider) {
+                e.preventDefault();
             }
-            
-            // Prevent default on the background and other areas to kill system behaviors
-            e.preventDefault();
         }, { passive: false });
 
         document.addEventListener('contextmenu', e => e.preventDefault());
@@ -382,58 +383,53 @@
         window.addEventListener('resize', updateOrientationUI);
         updateOrientationUI();
 
-        // ========== FULLSCREEN & ORIENTATION HANDLER FROM WORKING VERSION ==========
-        async function enterFullscreenAndStart() {
-            console.log('Attempting to enter fullscreen...');
+        // --- REBUILT Fullscreen & Orientation Lock Logic ---
+        const startSimulation = async () => {
+            const docEl = document.documentElement;
             
-            const element = document.documentElement;
+            // 1. Fullscreen request MUST be the very first line triggered by user gesture
+            const requestFS = docEl.requestFullscreen || 
+                              docEl.webkitRequestFullscreen || 
+                              docEl.mozRequestFullScreen || 
+                              docEl.msRequestFullscreen;
             
-            // Try different fullscreen methods
-            try {
-                if (element.requestFullscreen) {
-                    await element.requestFullscreen();
-                } else if (element.webkitRequestFullscreen) {
-                    await element.webkitRequestFullscreen();
-                } else if (element.mozRequestFullScreen) {
-                    await element.mozRequestFullScreen();
-                } else if (element.msRequestFullscreen) {
-                    await element.msRequestFullscreen();
+            if (requestFS) {
+                try { 
+                    // Attempt fullscreen immediately
+                    await requestFS.call(docEl);
+                } catch (err) {
+                    console.warn("Fullscreen request rejected or blocked.");
                 }
-                console.log('Fullscreen activated');
-            } catch (err) {
-                console.warn('Fullscreen failed:', err);
-                // Continue anyway - some browsers block it
             }
 
-            // Try to lock orientation (optional - won't break if not supported)
-            try {
-                if (screen.orientation && screen.orientation.lock) {
-                    await screen.orientation.lock('landscape').catch(e => {
-                        console.log('Orientation lock not available');
-                    });
-                }
-            } catch (err) {
-                console.log('Orientation lock failed');
-            }
-
-            // Hide overlay and show game UI
+            // 2. Hide overlay and show game UI
             startOverlay.style.display = 'none';
             document.getElementById('gui').style.display = 'block';
             document.getElementById('hit-counter-box').style.display = 'block';
             document.getElementById('pedal-container').style.display = 'flex';
             document.getElementById('steering-container').style.display = 'block';
-            
-            // Force canvas resize after UI changes
-            setTimeout(() => {
-                window.dispatchEvent(new Event('resize'));
-            }, 100);
-        }
 
-        // Tap triggers fullscreen sequence
+            // 3. Forced Orientation Lock
+            // We wait a tiny bit (250ms) for the FS transition to establish a "context" for locking
+            setTimeout(async () => {
+                try {
+                    if (screen.orientation && screen.orientation.lock) {
+                        await screen.orientation.lock('landscape').catch(e => console.warn("Orientation lock error:", e.message));
+                    } else {
+                        // Prefixed fallbacks
+                        const lock = screen.lockOrientation || screen.webkitLockOrientation || screen.mozLockOrientation || screen.msLockOrientation;
+                        if (lock) lock.call(screen, 'landscape');
+                    }
+                } catch (err) {
+                    console.warn("Rotation lock sequence failed.");
+                }
+            }, 250);
+        };
+
+        // Pointerdown is used for the fastest mobile response trigger
         startOverlay.addEventListener('pointerdown', (e) => {
             e.preventDefault();
-            e.stopPropagation();
-            enterFullscreenAndStart();
+            startSimulation();
         });
 
         // Close settings when clicking outside
