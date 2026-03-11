@@ -18,7 +18,6 @@
             user-select: none;
             -webkit-tap-highlight-color: transparent;
             -webkit-touch-callout: none;
-            /* Default to none to stop browser zoom/scroll interference */
             touch-action: none;
         }
 
@@ -51,7 +50,7 @@
         #start-overlay p { font-size: 18px; opacity: 0.9; border: 2px solid #f1c40f; padding: 10px 30px; border-radius: 50px; transition: 0.3s; }
         #orientation-msg { color: #e74c3c; margin-top: 20px; font-weight: bold; display: none; }
 
-        /* Base GUI - Desktop Default */
+        /* Base GUI */
         #gui {
             position: absolute;
             top: var(--safe-top);
@@ -122,6 +121,7 @@
             padding: 0 4px;
         }
 
+        /* Fixed Full-Box Scroll Menu */
         #slider-menu {
             margin-top: 10px;
             pointer-events: auto;
@@ -129,18 +129,19 @@
             max-height: 180px;
             overflow-y: auto;
             padding-right: 8px;
-            /* CRITICAL: Allow vertical scrolling anywhere in the box */
+            /* Allow vertical scrolling on the box itself */
             touch-action: pan-y !important; 
+            -webkit-overflow-scrolling: touch;
         }
         
         #slider-menu::-webkit-scrollbar { width: 4px; }
         #slider-menu::-webkit-scrollbar-thumb { background: #bdc3c7; border-radius: 10px; }
 
-        .slider-group { margin-bottom: 12px; }
+        .slider-group { margin-bottom: 12px; pointer-events: none; } /* Pass clicks to parent except for inputs */
         .slider-label { font-size: 10px; font-weight: 800; display: block; margin-bottom: 4px; color: #7f8c8d; text-transform: uppercase; }
-        input[type=range] { width: 100%; cursor: pointer; height: 6px; background: #dfe6e9; border-radius: 5px; outline: none; pointer-events: auto; }
+        input[type=range] { width: 100%; cursor: pointer; height: 18px; background: transparent; pointer-events: auto; }
 
-        /* Pedals container - Desktop Default */
+        /* Pedals container */
         #pedal-container {
             position: absolute;
             bottom: 40px;
@@ -172,7 +173,7 @@
         }
         #pedal-brake { width: 130px; height: 110px; } 
 
-        /* Steering wheel controller - Desktop Default */
+        /* Steering wheel controller */
         #steering-container {
             position: absolute;
             bottom: 40px;
@@ -194,35 +195,35 @@
         /* --- MOBILE ADJUSTMENTS --- */
         @media (max-width: 950px), (max-height: 500px) {
             #gui { 
-                top: 15px; 
-                left: 15px; 
-                width: 180px; 
-                padding: 10px; 
+                top: 10px; 
+                left: 10px; 
+                width: 170px; 
+                padding: 8px; 
             }
-            #slider-menu { max-height: 160px; }
-            .stat { font-size: 11px; }
-            .action-btn { font-size: 10px; padding: 8px 12px; }
-            #reset-btn { top: 38px; width: 32px; height: 32px; font-size: 18px; }
-            #menu-btn { font-size: 22px; }
+            #slider-menu { max-height: 150px; }
+            .stat { font-size: 10px; }
+            .action-btn { font-size: 9px; padding: 6px 10px; }
+            #reset-btn { top: 32px; width: 28px; height: 28px; font-size: 16px; }
+            #menu-btn { font-size: 20px; }
             
             #pedal-container { 
-                bottom: 15px; 
-                left: 15px; 
-                gap: 12px; 
+                bottom: 10px; 
+                left: 10px; 
+                gap: 10px; 
             }
             .pedal { 
-                width: 60px; 
-                height: 100px; 
-                font-size: 12px; 
+                width: 55px; 
+                height: 90px; 
+                font-size: 11px; 
                 border-width: 2px; 
             }
-            #pedal-brake { height: 80px; width: 90px; }
+            #pedal-brake { height: 70px; width: 85px; }
             
             #steering-container { 
-                bottom: 15px; 
-                right: 15px; 
-                width: 130px; 
-                height: 130px; 
+                bottom: 10px; 
+                right: 10px; 
+                width: 120px; 
+                height: 120px; 
             }
         }
 
@@ -248,7 +249,7 @@
         </div>
         
         <div id="slider-menu">
-            <div style="font-weight: bold; font-size: 11px; margin-bottom: 12px; border-bottom: 1px solid #ddd; padding-bottom: 4px; color: #2c3e50;">SETTINGS</div>
+            <div style="font-weight: bold; font-size: 11px; margin-bottom: 12px; border-bottom: 1px solid #ddd; padding-bottom: 4px; color: #2c3e50; pointer-events: none;">SETTINGS</div>
             <div class="slider-group">
                 <span class="slider-label">SPEED LIMITER: <span id="limit-val">30</span></span>
                 <input type="range" id="limit-slider" min="10" max="60" step="5" value="30">
@@ -261,7 +262,7 @@
                 <span class="slider-label">ROCK DENSITY: <span id="density-val">15</span></span>
                 <input type="range" id="density-slider" min="0" max="40" step="1" value="15">
             </div>
-            <button id="toggle-btn" class="action-btn">TOGGLE VISIBILITY (O)</button>
+            <button id="toggle-btn" class="action-btn" style="pointer-events: auto;">TOGGLE VISIBILITY (O)</button>
         </div>
     </div>
 
@@ -277,9 +278,11 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 
     <script>
-        // Force context menu disable and text selection disable for iOS stability
+        // Kill context menus and magnifying glasses globally
         document.addEventListener('contextmenu', e => e.preventDefault());
-        document.addEventListener('selectstart', e => e.preventDefault());
+        document.addEventListener('touchstart', e => {
+            if (e.target.closest('.pedal')) e.preventDefault(); // This stops vibration on pedals
+        }, {passive: false});
 
         // --- Initialization & UI Helpers ---
         const startOverlay = document.getElementById('start-overlay');
@@ -297,20 +300,14 @@
 
         const enterFullscreen = async () => {
             const docEl = window.document.documentElement;
-            const requestFS = docEl.requestFullscreen || 
-                              docEl.webkitRequestFullscreen || 
-                              docEl.mozRequestFullScreen || 
-                              docEl.msRequestFullscreen;
-            
+            const requestFS = docEl.requestFullscreen || docEl.webkitRequestFullscreen || docEl.mozRequestFullScreen || docEl.msRequestFullscreen;
             if (requestFS) {
                 try {
                     await requestFS.call(docEl);
                     if (screen.orientation && screen.orientation.lock) {
                         await screen.orientation.lock('landscape').catch(() => {});
                     }
-                } catch (err) {
-                    console.warn("Fullscreen request rejected.");
-                }
+                } catch (err) {}
             }
         };
 
@@ -452,7 +449,7 @@
         const spoke2 = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.35, 0.03), matMech); spoke2.position.y = -0.17; steerWheelGroup.add(spoke2);
         steerWheelGroup.position.set(driverX, 1.65, 0.8); steerWheelGroup.rotation.x = Math.PI / 4; car.add(steerWheelGroup);
 
-        // --- Improved Input Logic ---
+        // --- Input Logic ---
         const inputs = { w: false, space: false, a: false, d: false };
         let speed = 0, steerAngle = 0;
         let steerPointerId = null, steerLastAngle = 0;
@@ -470,7 +467,6 @@
 
         const setupPedal = (id, pedalKey) => {
             const el = document.getElementById(id);
-            // pointerdown + preventDefault + setPointerCapture is key for iPhone
             el.addEventListener('pointerdown', (e) => {
                 e.preventDefault();
                 e.stopPropagation();
@@ -486,8 +482,6 @@
             };
             el.addEventListener('pointerup', release);
             el.addEventListener('pointercancel', release);
-            // Strict touch-start handling for iOS vibration blocking
-            el.addEventListener('touchstart', (e) => e.preventDefault(), {passive: false});
         };
         setupPedal('pedal-accel', 'w');
         setupPedal('pedal-brake', 'space');
@@ -506,7 +500,6 @@
             steerLastAngle = getSteerAngleFromCoords(e.clientX, e.clientY);
             wheelCont.setPointerCapture(e.pointerId);
         });
-        wheelCont.addEventListener('touchstart', (e) => e.preventDefault(), {passive: false});
 
         window.addEventListener('pointermove', (e) => {
             if (e.pointerId !== steerPointerId) return;
@@ -521,13 +514,6 @@
         const releaseSteer = (e) => { if (e.pointerId === steerPointerId) steerPointerId = null; };
         window.addEventListener('pointerup', releaseSteer);
         window.addEventListener('pointercancel', releaseSteer);
-
-        window.addEventListener('blur', () => {
-            inputs.w = inputs.space = inputs.a = inputs.d = false;
-            activePedalPointers.clear();
-            steerPointerId = null;
-            document.querySelectorAll('.pedal').forEach(p => p.classList.remove('active'));
-        });
 
         function redoPosition() {
             car.position.set(0, 0, 0); car.rotation.y = 0; speed = 0; steerAngle = 0;
