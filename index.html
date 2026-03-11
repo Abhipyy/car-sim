@@ -13,7 +13,6 @@
         }
 
         * {
-            /* Prevent all native selection, zooming, and context menus */
             -webkit-user-select: none;
             user-select: none;
             -webkit-tap-highlight-color: transparent;
@@ -27,7 +26,7 @@
             background: #000; 
             width: 100vw;
             height: 100dvh;
-            touch-action: none; /* Prevents browser level gestures */
+            touch-action: none;
         }
         
         /* Start Overlay */
@@ -93,7 +92,7 @@
             position: absolute;
             top: var(--safe-top);
             right: var(--safe-right);
-            background: rgba(255, 255, 255, 0.4); 
+            background: rgba(255, 255, 255, 0.4); /* Increased transparency */
             backdrop-filter: blur(10px);
             -webkit-backdrop-filter: blur(10px);
             padding: 8px 15px;
@@ -112,7 +111,7 @@
             top: var(--safe-top);
             left: var(--safe-left);
             color: #333;
-            background: rgba(255, 255, 255, 0.4); 
+            background: rgba(255, 255, 255, 0.4); /* Increased transparency */
             backdrop-filter: blur(10px);
             -webkit-backdrop-filter: blur(10px);
             padding: 12px;
@@ -175,7 +174,7 @@
         #slider-menu {
             margin-top: 10px;
             display: none;
-            max-height: 180px; 
+            max-height: 180px; /* Reduced height as requested */
             overflow-y: auto;
             touch-action: pan-y !important;
             -webkit-overflow-scrolling: touch;
@@ -186,7 +185,7 @@
         #slider-menu::-webkit-scrollbar-thumb { background: #bdc3c7; border-radius: 10px; }
 
         .slider-group { margin-bottom: 15px; }
-        .slider-label { font-size: 10px; font-weight: 800; display: block; margin-bottom: 4px; color: #2c3e50; text-transform: uppercase; }
+        .slider-label { font-size: 10px; font-weight: 800; display: block; margin-bottom: 4px; color: #555; text-transform: uppercase; }
         
         input[type=range] { 
             -webkit-appearance: none;
@@ -342,20 +341,13 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 
     <script>
-        // --- VIBRATION & HAPTIC KILLER ---
-        // We intercept touchstart globally. 
-        // We MUST use e.preventDefault() on a non-passive listener to stop iOS long-press vibration.
-        document.addEventListener('touchstart', e => {
-            // Check if user is touching a slider or the scrollable settings menu
-            const isInput = e.target.type === 'range' || e.target.closest('#slider-menu');
-            
-            if (!isInput) {
-                // If not an input, prevent default to kill magnifying glass, haptics, and context menus
-                e.preventDefault();
-            }
-        }, { passive: false });
-
+        // Force context menu and touch-start selection blocking
         document.addEventListener('contextmenu', e => e.preventDefault());
+        document.addEventListener('touchstart', e => {
+            if (e.target.closest('.pedal') || e.target.closest('.gui-btn') || e.target.type === 'range') {
+                if(!e.target.type === 'range') e.preventDefault(); 
+            }
+        }, {passive: true});
 
         // --- State ---
         let rockHits = 0;
@@ -396,7 +388,6 @@
             document.getElementById('steering-container').style.display = 'block';
         });
 
-        // Close settings when clicking outside
         window.addEventListener('pointerdown', (e) => {
             const menu = document.getElementById('slider-menu');
             const gui = document.getElementById('gui');
@@ -582,7 +573,7 @@
         const setupPedal = (id, pedalKey) => {
             const el = document.getElementById(id);
             el.addEventListener('pointerdown', (e) => {
-                e.setPointerCapture(e.pointerId);
+                e.preventDefault(); e.stopPropagation(); el.setPointerCapture(e.pointerId);
                 el.classList.add('active');
                 activePedalPointers.set(e.pointerId, pedalKey);
             });
@@ -597,31 +588,25 @@
         setupPedal('pedal-brake', 'space');
 
         const wheelCont = document.getElementById('steering-container'), wheelEl = document.getElementById('ui-wheel');
-        const getSteerAngleFromCoords = (clientX, clientY) => {
-            const rect = wheelCont.getBoundingClientRect();
-            return Math.atan2(clientY - (rect.top + rect.height/2), clientX - (rect.left + rect.width/2));
-        };
-
         wheelCont.addEventListener('pointerdown', (e) => {
+            e.preventDefault(); e.stopPropagation();
             if (steerPointerId !== null) return;
             steerPointerId = e.pointerId;
-            steerLastAngle = getSteerAngleFromCoords(e.clientX, e.clientY);
+            const rect = wheelCont.getBoundingClientRect();
+            steerLastAngle = Math.atan2(e.clientY - (rect.top + rect.height/2), e.clientX - (rect.left + rect.width/2));
             wheelCont.setPointerCapture(e.pointerId);
         });
-
         window.addEventListener('pointermove', (e) => {
             if (e.pointerId !== steerPointerId) return;
-            const currentAngle = getSteerAngleFromCoords(e.clientX, e.clientY);
+            const rect = wheelCont.getBoundingClientRect();
+            const currentAngle = Math.atan2(e.clientY - (rect.top + rect.height/2), e.clientX - (rect.left + rect.width/2));
             let delta = currentAngle - steerLastAngle;
             if (delta > Math.PI) delta -= Math.PI * 2; if (delta < -Math.PI) delta += Math.PI * 2;
             steerAngle -= delta * 1.5 * CONFIG.steerSensitivity;
             steerAngle = Math.max(-CONFIG.maxSteer, Math.min(CONFIG.maxSteer, steerAngle));
             steerLastAngle = currentAngle;
         });
-
-        const releaseSteer = (e) => { if (e.pointerId === steerPointerId) steerPointerId = null; };
-        window.addEventListener('pointerup', releaseSteer);
-        window.addEventListener('pointercancel', releaseSteer);
+        window.addEventListener('pointerup', (e) => { if (e.pointerId === steerPointerId) steerPointerId = null; });
 
         function redoPosition() {
             car.position.set(0, 0, 0); car.rotation.y = 0; speed = 0; steerAngle = 0;
@@ -735,11 +720,7 @@
         }
 
         function animate() { requestAnimationFrame(animate); update(); renderer.render(scene, camera); }
-        window.addEventListener('resize', () => { 
-            camera.aspect = window.innerWidth/window.innerHeight; 
-            camera.updateProjectionMatrix(); 
-            renderer.setSize(window.innerWidth, window.innerHeight); 
-        });
+        window.addEventListener('resize', () => { camera.aspect = window.innerWidth/window.innerHeight; camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth, window.innerHeight); });
         animate();
     </script>
 </body>
