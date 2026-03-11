@@ -45,7 +45,7 @@
             text-align: center;
             padding: 20px;
             box-sizing: border-box;
-            touch-action: auto; 
+            touch-action: auto; /* Required for the button to take clicks */
         }
         #start-overlay h1 { margin-bottom: 10px; font-size: clamp(24px, 5vw, 36px); color: #f1c40f; text-transform: uppercase; letter-spacing: 2px; }
         #start-overlay p { font-size: 18px; opacity: 0.9; border: 2px solid #f1c40f; padding: 10px 30px; border-radius: 50px; transition: 0.3s; }
@@ -348,14 +348,19 @@
     <script>
         // --- VIBRATION & HAPTIC KILLER ---
         document.addEventListener('touchstart', e => {
-            const isScrollable = e.target.closest('#slider-menu');
+            const isScrollMenu = e.target.closest('#slider-menu');
             const isSlider = e.target.type === 'range';
-            const isTouchable = e.target.classList.contains('pedal') || e.target.classList.contains('gui-btn') || e.target.closest('#start-overlay') || e.target.closest('#controls-overlay');
-
-            if (!isScrollable && !isSlider) {
-                // Block touch on background and buttons to kill vibration
-                e.preventDefault();
+            const isStart = e.target.closest('#start-overlay');
+            const isControls = e.target.closest('#controls-overlay');
+            const isControlBtn = e.target.closest('.gui-btn') || e.target.closest('.pedal') || e.target.classList.contains('action-btn');
+            
+            // Allow start button and settings to receive touches
+            if (isScrollMenu || isSlider || isStart || isControls || isControlBtn) {
+                return;
             }
+            
+            // Prevent default on the background and other areas to kill system behaviors
+            e.preventDefault();
         }, { passive: false });
 
         document.addEventListener('contextmenu', e => e.preventDefault());
@@ -377,53 +382,58 @@
         window.addEventListener('resize', updateOrientationUI);
         updateOrientationUI();
 
-        // --- REBUILT Fullscreen & Orientation Lock Sequence ---
-        const enterFullscreenAndLock = async () => {
-            const docEl = document.documentElement;
+        // ========== FULLSCREEN & ORIENTATION HANDLER FROM WORKING VERSION ==========
+        async function enterFullscreenAndStart() {
+            console.log('Attempting to enter fullscreen...');
             
-            // 1. Fullscreen request MUST be triggered immediately in the event loop for security
-            const requestFS = docEl.requestFullscreen || 
-                              docEl.webkitRequestFullscreen || 
-                              docEl.mozRequestFullScreen || 
-                              docEl.msRequestFullscreen;
+            const element = document.documentElement;
             
-            if (requestFS) {
-                try { 
-                    await requestFS.call(docEl);
-                } catch (err) {
-                    console.warn("Fullscreen request rejected.");
+            // Try different fullscreen methods
+            try {
+                if (element.requestFullscreen) {
+                    await element.requestFullscreen();
+                } else if (element.webkitRequestFullscreen) {
+                    await element.webkitRequestFullscreen();
+                } else if (element.mozRequestFullScreen) {
+                    await element.mozRequestFullScreen();
+                } else if (element.msRequestFullscreen) {
+                    await element.msRequestFullscreen();
                 }
+                console.log('Fullscreen activated');
+            } catch (err) {
+                console.warn('Fullscreen failed:', err);
+                // Continue anyway - some browsers block it
             }
 
-            // 2. Delayed Orientation Lock
-            // Browsers often require the fullscreen transition to finish before allowing lock
-            setTimeout(async () => {
-                const lock = screen.orientation?.lock || screen.webkitLockOrientation || screen.mozLockOrientation || screen.msLockOrientation;
-                if (lock) {
-                    try {
-                        if (screen.orientation && screen.orientation.lock) {
-                            await screen.orientation.lock('landscape').catch(e => console.warn("Lock rejected:", e.message));
-                        } else {
-                            lock.call(screen, 'landscape');
-                        }
-                    } catch (err) {
-                        console.warn("Forced rotation failed.");
-                    }
+            // Try to lock orientation (optional - won't break if not supported)
+            try {
+                if (screen.orientation && screen.orientation.lock) {
+                    await screen.orientation.lock('landscape').catch(e => {
+                        console.log('Orientation lock not available');
+                    });
                 }
-            }, 500); // 500ms delay to ensure transition stability
-        };
+            } catch (err) {
+                console.log('Orientation lock failed');
+            }
 
-        // Click handles both Fullscreen and Orientation lock most reliably
-        startOverlay.addEventListener('pointerdown', async (e) => {
-            e.preventDefault();
-            await enterFullscreenAndLock();
-            
-            // Proceed with game start
+            // Hide overlay and show game UI
             startOverlay.style.display = 'none';
             document.getElementById('gui').style.display = 'block';
             document.getElementById('hit-counter-box').style.display = 'block';
             document.getElementById('pedal-container').style.display = 'flex';
             document.getElementById('steering-container').style.display = 'block';
+            
+            // Force canvas resize after UI changes
+            setTimeout(() => {
+                window.dispatchEvent(new Event('resize'));
+            }, 100);
+        }
+
+        // Tap triggers fullscreen sequence
+        startOverlay.addEventListener('pointerdown', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            enterFullscreenAndStart();
         });
 
         // Close settings when clicking outside
